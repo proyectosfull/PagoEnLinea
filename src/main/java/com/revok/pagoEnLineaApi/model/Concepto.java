@@ -6,17 +6,28 @@ import lombok.Data;
 @Data
 @Entity
 @NamedNativeQuery(name = "findConceptosPago",
-        query = "SELECT c.cvconcepto, c.descripcion, SUM(p.Costo) as costo" +
-                " FROM PagosConceptos p left join ConceptosPago c on p.cvconcepto=c.cvconcepto  where (status<>'PAGADO' and status<>'CANCELADO') and c.Activo='SI' and p.cvconcepto not in (" + excepciones + ") and p.Costo!=0 and cvcontrato='" + cvcontrato + "' group by c.cvconcepto, c.descripcion order by c.descripcion asc",
+        query = " SELECT c.cvconcepto, c.descripcion, SUM(p.costo) AS costo" +
+                " FROM PagosConceptos p" +
+                " LEFT JOIN ConceptosPago c ON p.cvconcepto = c.cvconcepto" +
+                " WHERE (status <> 'PAGADO' AND status <> 'CANCELADO')" +
+                " AND c.activo = 'SI' AND p.cvconcepto NOT IN ( 3,4,5,8,17,19,24,80,100,268,254 )" +
+                " AND p.costo != 0 AND cvcontrato = ?" +
+                " GROUP BY c.cvconcepto, c.descripcion" +
+                " ORDER BY c.descripcion ASC",
         resultSetMapping = "findConceptosPagoMapping"
 )
 @SqlResultSetMapping(name = "findConceptosPagoMapping",
         classes = @ConstructorResult(
-                targetClass = Toma.class,
+                targetClass = Concepto.class,
                 columns = {
-                        @ColumnResult(name = "cvcliente"),
+                        @ColumnResult(name = "cvconcepto", type = Integer.class),
+                        @ColumnResult(name = "descripcion"),
+                        @ColumnResult(name = "costo", type = Float.class),
 
                 }
         ))
 public class Concepto {
+    private Integer cvconcepto;
+    private String descripcion;
+    private Float costo;
 }
