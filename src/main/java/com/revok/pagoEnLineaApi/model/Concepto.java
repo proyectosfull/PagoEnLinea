@@ -6,7 +6,7 @@ import lombok.Data;
 @Data
 @Entity
 @NamedNativeQuery(name = "findConceptosPago",
-        query = " SELECT c.cvconcepto, c.descripcion, SUM(p.costo) AS costo" +
+        query = " SELECT TOP 1 c.cvconcepto, c.descripcion, SUM(p.costo) AS costo" +
                 " FROM PagosConceptos p" +
                 " LEFT JOIN ConceptosPago c ON p.cvconcepto = c.cvconcepto" +
                 " WHERE (status <> 'PAGADO' AND status <> 'CANCELADO')" +
@@ -27,6 +27,7 @@ import lombok.Data;
                 }
         ))
 public class Concepto {
+    @Id
     private Integer cvconcepto;
     private String descripcion;
     private Float costo;

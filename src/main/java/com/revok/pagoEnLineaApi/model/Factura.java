@@ -14,24 +14,24 @@ import lombok.Data;
 )
 @SqlResultSetMapping(name = "findFacturaMapping",
         classes = @ConstructorResult(
-                targetClass = Propietario.class,
+                targetClass = Factura.class,
                 columns = {
+                        @ColumnResult(name = "razonSocial"),
+                        @ColumnResult(name = "rfc"),
+                        @ColumnResult(name = "codigoPostal"),
+                        @ColumnResult(name = "estado"),
+                        @ColumnResult(name = "municipio"),
+                        @ColumnResult(name = "localidad"),
+                        @ColumnResult(name = "colonia"),
                         @ColumnResult(name = "calle"),
                         @ColumnResult(name = "numint"),
-                        @ColumnResult(name = "coninsen"),
-                        @ColumnResult(name = "rfc"),
-                        @ColumnResult(name = "email"),
-                        @ColumnResult(name = "tel"),
-                        @ColumnResult(name = "celular"),
-                        @ColumnResult(name = "cvcliente"),
-                        @ColumnResult(name = "nombre"),
-                        @ColumnResult(name = "appaterno"),
-                        @ColumnResult(name = "apmaterno"),
-                        @ColumnResult(name = "nombreCompleto"),
+                        @ColumnResult(name = "tipoPersona"),
+
                 }
         ))
 public class Factura {
     private String razonSocial;
+    @Id
     private String rfc;
     private String codigoPostal;
     private String estado;

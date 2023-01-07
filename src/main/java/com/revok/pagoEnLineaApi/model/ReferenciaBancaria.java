@@ -21,5 +21,6 @@ import lombok.Data;
         ))
 public class ReferenciaBancaria {
     /** "" default value */
+    @Id
     private String referencia = "";
 }

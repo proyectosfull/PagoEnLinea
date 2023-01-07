@@ -18,7 +18,7 @@ import lombok.Data;
         classes = @ConstructorResult(
                 targetClass = ParcialidadConcepto.class,
                 columns = {
-                        @ColumnResult(name = "cvconcepto", type = Integer.class),
+                        @ColumnResult(name = "cvconcepto"),
                         @ColumnResult(name = "descripcion"),
                         @ColumnResult(name = "costo", type = Float.class),
                         @ColumnResult(name = "fecha"),
@@ -26,7 +26,8 @@ import lombok.Data;
                 }
         ))
 public class ParcialidadConcepto {
-    private Integer cvconcepto;
+    @Id
+    private String cvconcepto;
     private String descripcion;
     private Float costo;
     private String fecha;

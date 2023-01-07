@@ -30,6 +30,7 @@ import lombok.Data;
                 }
         ))
 public class Convenio {
+    @Id
     private Integer numeroConvenio;
     private Float adeudoTotal;
     private String estatus;

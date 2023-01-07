@@ -21,6 +21,7 @@ import lombok.Data;
                 }
         ))
 public class Mensaje {
+    @Id
     private String mensaje;
     private String fecha;
 }
