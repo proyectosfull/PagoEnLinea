@@ -10,14 +10,14 @@ import lombok.Data;
                 ", CASE WHEN conmedidor = 'SI' THEN 1 ELSE 0 END AS tieneMedidor" +
                 ", t.saneamiento, t.numfamilia" +
                 ", t.codpost AS codigoPostal, CASE WHEN t.apmanten = 'SI' THEN 1 ELSE 0 END AS especial" +
-                ", g.cvgiros, g.nombre as nombreGiro, g.tanterior AS tarifaAnterior, g.tarifactual AS tarifaActual, g.saneamiento AS saneamientoGiro" +
+                ", g.cvgiros as cvgiro, g.nombre as nombreGiro, g.tanterior AS tarifaAnterior, g.tarifactual AS tarifaActual, g.saneamiento AS saneamientoGiro" +
                 ", g.totalconsane AS TarifaConSaneamiento, g.descinap as descuentoInap" +
                 ", estados.nombre AS nombreEstado" +
                 ", municipios.nombre AS nombreMunicipio" +
                 ", colonia.cvcolonia, colonia.nombre AS nombreColonia" +
                 ", localidad.nombre AS nombreLocalidad" +
                 ", status.nombre as nombreEstatus" +
-                ", t.observa" +
+                ", t.observa, g. fecvigencia" +
                 " FROM dattomas t" +
                 " LEFT JOIN giros g ON g.cvgiros = t.uso" +
                 " LEFT JOIN status ON status.cvstatus = t.statustom" +
@@ -40,7 +40,7 @@ import lombok.Data;
                         @ColumnResult(name = "numfamilia", type = Integer.class),
                         @ColumnResult(name = "codigoPostal"),
                         @ColumnResult(name = "especial", type = Boolean.class),
-                        @ColumnResult(name = "cvgiros", type = Integer.class),
+                        @ColumnResult(name = "cvgiro", type = Integer.class),
                         @ColumnResult(name = "nombreGiro"),
                         @ColumnResult(name = "tarifaAnterior", type = Float.class),
                         @ColumnResult(name = "tarifaActual", type = Float.class),
@@ -65,7 +65,7 @@ public class Toma {
     private Integer numfamilia;
     private String codigoPostal;
     private Boolean especial;
-    private Integer cvgiros;
+    private Integer cvgiro;
     private String nombreGiro;
     private Float tarifaAnterior;
     private Float tarifaActual;

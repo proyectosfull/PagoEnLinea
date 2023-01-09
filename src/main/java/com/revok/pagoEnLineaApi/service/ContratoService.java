@@ -44,6 +44,7 @@ public class ContratoService {
             return null;
         return (ReferenciaBancaria) result.get(0);
     }
+
     public Ultimopago findUltimoPago(String cvcontrato, Boolean tieneMedidor) {
         Query query = entityManager.createNamedQuery("findUltimoPago");
         query.setParameter(1, cvcontrato);
@@ -99,6 +100,7 @@ public class ContratoService {
         return (Convenio) result.get(0);
     }
 
+    @SuppressWarnings("unchecked")
     public List<ParcialidadConcepto> findAllParcialidadConcepto(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findAllParcialidadConcepto");
         query.setParameter(1, cvcontrato);
@@ -134,6 +136,7 @@ public class ContratoService {
         return query.getResultList().size() > 0;
     }
 
+    @SuppressWarnings("unchecked")
     public List<HistoricoAuxiliar> findAllHistoricoAuxiliar(String cvcontrato) {
         if (!existsHistorioAuxiliar(cvcontrato))
             return new ArrayList<>();
@@ -175,5 +178,26 @@ public class ContratoService {
         }
         contrato.setHistoricoAuxiliar(findAllHistoricoAuxiliar(cvcontrato));
         return contrato;
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<Parametro> findAllParametro() {
+        return entityManager.createNamedQuery("findAllParametro").getResultList();
+    }
+
+    public void findCuentaPorPagarFromMonths(String cvcontrato, int meses, Departamento departamento) {
+        Contrato contrato = findContrato(cvcontrato, departamento);
+
+        LocalDate giroFechaVigenciaTarifa = LocalDate.now();
+        LocalDate giroFechaVigenciaSaneamiento = LocalDate.now();
+
+        if (departamento == Departamento.CENTRO) {
+            Query query = entityManager.createNamedQuery("findUltimoAnioVigencia");
+            query.setParameter(1, contrato.getToma().getCvgiro());
+            UltimoAnioVigencia ultimoAnioVigencia = (UltimoAnioVigencia) query.getSingleResult();
+            float giroTarifaAnterior = contrato.getToma().getTarifaAnterior() * contrato.getToma().getNumfamilia();
+            float giroTarifaActual = contrato.getToma().getTarifaActual() * contrato.getToma().getNumfamilia();
+        }
+
     }
 }
