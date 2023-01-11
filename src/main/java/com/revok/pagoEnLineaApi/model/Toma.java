@@ -8,16 +8,18 @@ import lombok.Data;
 @NamedNativeQuery(name = "findToma",
         query = "SELECT t.cvcliente, t.calle, t.numint" +
                 ", CASE WHEN conmedidor = 'SI' THEN 1 ELSE 0 END AS tieneMedidor" +
-                ", t.saneamiento, t.numfamilia" +
+                ", CASE WHEN t.saneamiento = 'SI' THEN 1 ELSE 0 AS saneamiento, t.numfamilia" +
                 ", t.codpost AS codigoPostal, CASE WHEN t.apmanten = 'SI' THEN 1 ELSE 0 END AS especial" +
                 ", g.cvgiros as cvgiro, g.nombre as nombreGiro, g.tanterior AS tarifaAnterior, g.tarifactual AS tarifaActual, g.saneamiento AS saneamientoGiro" +
-                ", g.totalconsane AS TarifaConSaneamiento, g.descinap as descuentoInap" +
+                ", g.totalconsane AS TarifaConSaneamiento" +
+                ", CASE WHEN g.descinap = 'SI' THEN 1 ELSE 0 AS descuentoInap" +
                 ", estados.nombre AS nombreEstado" +
                 ", municipios.nombre AS nombreMunicipio" +
                 ", colonia.cvcolonia, colonia.nombre AS nombreColonia" +
                 ", localidad.nombre AS nombreLocalidad" +
                 ", status.nombre as nombreEstatus" +
-                ", t.observa, g. fecvigencia" +
+                ", t.observa, g.fecvigencia AS fechaVigenciaTarifaGiro" +
+                ", g.fechasaneamiento AS fechaVigenciaSaneamientoGiro" +
                 " FROM dattomas t" +
                 " LEFT JOIN giros g ON g.cvgiros = t.uso" +
                 " LEFT JOIN status ON status.cvstatus = t.statustom" +
@@ -36,7 +38,7 @@ import lombok.Data;
                         @ColumnResult(name = "calle"),
                         @ColumnResult(name = "numint"),
                         @ColumnResult(name = "tieneMedidor", type = Boolean.class),
-                        @ColumnResult(name = "saneamiento"),
+                        @ColumnResult(name = "saneamiento", type = Boolean.class),
                         @ColumnResult(name = "numfamilia", type = Integer.class),
                         @ColumnResult(name = "codigoPostal"),
                         @ColumnResult(name = "especial", type = Boolean.class),
@@ -46,13 +48,15 @@ import lombok.Data;
                         @ColumnResult(name = "tarifaActual", type = Float.class),
                         @ColumnResult(name = "saneamientoGiro", type = Float.class),
                         @ColumnResult(name = "TarifaConSaneamiento", type = Float.class),
-                        @ColumnResult(name = "descuentoInap"),
+                        @ColumnResult(name = "descuentoInap", type = Boolean.class),
                         @ColumnResult(name = "nombreEstado"),
                         @ColumnResult(name = "nombreMunicipio"),
                         @ColumnResult(name = "nombreColonia"),
                         @ColumnResult(name = "nombreLocalidad"),
                         @ColumnResult(name = "nombreEstatus"),
                         @ColumnResult(name = "observa"),
+                        @ColumnResult(name = "fechaVigenciaTarifaGiro"),
+                        @ColumnResult(name = "fechaVigenciaSaneamientoGiro"),
                 }
         ))
 public class Toma {
@@ -61,7 +65,7 @@ public class Toma {
     private String calle;
     private String numint;
     private Boolean tieneMedidor;
-    private String saneamiento;
+    private Boolean saneamiento;
     private Integer numfamilia;
     private String codigoPostal;
     private Boolean especial;
@@ -71,11 +75,13 @@ public class Toma {
     private Float tarifaActual;
     private Float saneamientoGiro;
     private Float TarifaConSaneamiento;
-    private String descuentoInap;
+    private Boolean descuentoInap;
     private String nombreEstado;
     private String nombreMunicipio;
     private String nombreColonia;
     private String nombreLocalidad;
     private String nombreEstatus;
     private String observa;
+    private String fechaVigenciaTarifaGiro;
+    private String fechaVigenciaSaneamientoGiro;
 }

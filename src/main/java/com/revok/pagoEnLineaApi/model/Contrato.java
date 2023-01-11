@@ -6,6 +6,8 @@ import java.util.List;
 
 @Data
 public class Contrato {
+
+    private String cvcontrato;
     private Propietario propietario;
     private Factura factura;
     private ReferenciaBancaria referenciaBancaria;

@@ -25,7 +25,7 @@ public class Parametro {
     private String nombre;
     private Float cantidad;
 
-    enum ParametroType {
+    public enum ParametroType {
 
         RECA,
         GE,
