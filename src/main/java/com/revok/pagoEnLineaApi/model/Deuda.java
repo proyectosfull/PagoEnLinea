@@ -15,8 +15,6 @@ public class Deuda {
     private float totalSaneamiento = 0f;
     private float totalRecargos = 0f;
     private float totalGastosCobranza = 0f;
-    private float totalConvenio = 0f;
-    private float saldoFavor = 0f;
     private LocalDate fechaUltimoPago;
     private LocalDate fechaCubre;
     private List<Concepto> conceptos = new ArrayList<>();

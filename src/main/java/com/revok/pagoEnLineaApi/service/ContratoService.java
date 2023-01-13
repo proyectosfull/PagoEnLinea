@@ -6,6 +6,8 @@ import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -75,20 +77,18 @@ public class ContratoService {
             LocalDate now = LocalDate.now();
             LocalDate fechaCubreTyped = LocalDate.parse(fechaCubre, formatterReturn);
             mesesPorPagar = (int) ChronoUnit.MONTHS.between(
-                    YearMonth.from(now),
-                    YearMonth.from(fechaCubreTyped)
+                    YearMonth.from(fechaCubreTyped),
+                    YearMonth.from(now)
             );
         }
         return mesesPorPagar;
     }
 
-    public Concepto findConcepto(String cvcontrato) {
-        Query query = entityManager.createNamedQuery("findConceptosPago");
+    @SuppressWarnings("unchecked")
+    public List<Concepto> findAllConcepto(String cvcontrato) {
+        Query query = entityManager.createNamedQuery("findAllConcepto");
         query.setParameter(1, cvcontrato);
-        List<?> result = query.getResultList();
-        if (result.isEmpty())
-            return null;
-        return (Concepto) result.get(0);
+        return (List<Concepto>) query.getResultList();
     }
 
     public Convenio findConvenio(String cvcontrato) {
@@ -169,7 +169,7 @@ public class ContratoService {
         contrato.setToma(findToma(cvcontrato));
         contrato.setUltimoPago(findUltimoPago(cvcontrato, contrato.getToma().getTieneMedidor()));
         contrato.setMesesPorPagar(findMesesPorPagar(cvcontrato, contrato.getToma().getTieneMedidor(), contrato.getUltimoPago().getFechaCubre()));
-        contrato.setConcepto(findConcepto(cvcontrato));
+        contrato.setConceptos(findAllConcepto(cvcontrato));
         contrato.setConvenio(findConvenio(cvcontrato));
         contrato.setParcialidadConceptos(findAllParcialidadConcepto(cvcontrato));
         contrato.setFechaUltimoPago(findFechaUltimoPago(cvcontrato));
@@ -221,13 +221,17 @@ public class ContratoService {
             );
         }
 
+        BigDecimal totalCuotabd = new BigDecimal("0");
         float totalCuota = 0;
         float totalSaneamiento = 0;
+        BigDecimal totalSaneamientobd = new BigDecimal("0");
         float totalGastosCobranza = 0;
         float totalRecargos = 0;
 
         float tarifa = 0f;
         float saneamiento = 0;
+
+        // empieza bloque de cuota fija
 
         if (departamento == Departamento.CENTRO) {
             Query query = entityManager.createNamedQuery("findUltimoAnioVigencia");
@@ -237,7 +241,7 @@ public class ContratoService {
                 // Obtener el valor de la tarifa del historial de acuerdo a la fecha.
                 Query queryTarifa = entityManager.createNativeQuery(" SELECT TOP 1 tagua_actual" +
                         " FROM tarifas WHERE cvgiro = ? AND YEAR(fechavigencia) = ?" +
-                        " ORDER BY CONVERT(date, fechavigencia) DESC");
+                        " ORDER BY CONVERT(date, fechavigencia) DESC", Float.class);
                 queryTarifa.setParameter(1, contrato.getToma().getCvgiro());
                 queryTarifa.setParameter(2,
                         (fechaUltimoPago.getYear() < ultimoAnioVigencia.getMinVigenciaTarifa() ?
@@ -246,12 +250,13 @@ public class ContratoService {
                                         ultimoAnioVigencia.getMaxVigenciaTarifa() : fechaUltimoPago.getYear()))
                 );
                 List<?> queryTarifaResult = queryTarifa.getResultList();
-                totalCuota += !queryTarifaResult.isEmpty() ? (double) queryTarifaResult.get(0) : 0f;
+                tarifa = queryTarifaResult.isEmpty() ? 0f : (float) queryTarifaResult.get(0);
+                totalCuotabd = totalCuotabd.add(BigDecimal.valueOf(tarifa));
 
                 Query querySaneamiento = entityManager.createNativeQuery(" SELECT TOP 1 tsane_actual" +
                         " FROM tarifas WHERE cvgiro = ?" +
                         " AND YEAR(fsanevigencia) = ?"
-                        + " ORDER BY CONVERT(date, fsanevigencia) DESC");
+                        + " ORDER BY CONVERT(date, fsanevigencia) DESC", Float.class);
                 querySaneamiento.setParameter(1, contrato.getToma().getCvgiro());
                 querySaneamiento.setParameter(2,
                         (fechaUltimoPago.getYear() < ultimoAnioVigencia.getMinVigenciaSaneamiento() ?
@@ -261,65 +266,158 @@ public class ContratoService {
                 );
 
                 List<?> querySaneamientoResult = querySaneamiento.getResultList();
-                totalSaneamiento += querySaneamientoResult.size() > 0f ? (double) querySaneamientoResult.get(0) : 0f;
+                saneamiento = querySaneamientoResult.isEmpty() ? 0f : (float) querySaneamientoResult.get(0);
+                totalSaneamientobd = totalSaneamientobd.add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN));
                 // Si el contador es  menor a la cantidad de meses total, se agregan recargos
-                // (cuando sea igual a los meses de deuda se asimila que es el mes corriente y no se agrega recargo).
-                if (i < mesesDeuda && !contrato.getToma().getEspecial() && totalRecargos < maxRecargos && parametroRecargo != null) {
+                // (cuando sea igual a los meses de deuda se asimila que es el
+                // mes corriente y no se agrega recargo).
+                if (i < mesesDeuda && !contrato.getToma().getEspecial() && parametroRecargo != null) {
                     totalRecargos += (tarifa + saneamiento) * parametroRecargo.getCantidad();
                 }
+                fechaUltimoPago = fechaUltimoPago.plus(1, ChronoUnit.MONTHS);
             }
         } else {
             for (int i = 0; i < meses; i++) {
                 // Obtener el valor de la tarifa actual del giro.
                 tarifa = giroTarifaActual;
-                totalCuota = totalCuota + tarifa;
+                totalCuotabd = totalCuotabd.add(BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN));
 
                 // Obtener el valor del saneamiento actual del giro.
                 saneamiento = giroSaneamientoActual;
-                totalSaneamiento += saneamiento;
+                totalSaneamientobd = totalSaneamientobd.add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN));
 
-                if (i < mesesDeuda && !contrato.getToma().getEspecial() && totalRecargos < maxRecargos && parametroRecargo != null) {
+                if (i < mesesDeuda && !contrato.getToma().getEspecial() && parametroRecargo != null) {
                     totalRecargos += (tarifa + saneamiento) * parametroRecargo.getCantidad();
                 }
             }
         }
-
+        totalCuota = totalCuotabd.floatValue();
+        totalSaneamiento = totalSaneamientobd.floatValue();
         // Si los meses vencidos son mayor o igual al de máximo de gastos de cobranza
         // se agregan a la deuda.
-        if (parametroMesesGastosCobransa != null && mesesConRecargos < parametroMesesGastosCobransa.getCantidad()) {
+        if (parametroMesesGastosCobransa != null && mesesConRecargos >= parametroMesesGastosCobransa.getCantidad()) {
             // Obtener meses con gastos de cobranza restando a los meses de adeudo la cantidad
             // de meses en la que se comienza a cobrar esos gastos de cobranza.
             int mesesConGastosCobranza = mesesDeuda - parametroMesesGastosCobransa.getCantidad().intValue();
             // Obtener los meses a pagar que no incluyen gastos de cobranza.
-            int mesesPagarSinGastosCobranza = mesesDeuda - mesesConGastosCobranza;
+            int mesesPagarSinGastosCobranza = meses - mesesConGastosCobranza;
             // Si paga más de con gastos de cobranza, se quitan l
-            float tarifaConGastosCobranza = (mesesDeuda <= mesesConGastosCobranza) ? totalCuota : (totalCuota - (tarifa * mesesPagarSinGastosCobranza));
-            float saneamientoConGastosCobranza = (mesesDeuda <= mesesConGastosCobranza) ? totalSaneamiento : (totalSaneamiento - (saneamiento * mesesPagarSinGastosCobranza));
+
+            float tarifaConGastosCobranza = meses <= mesesConGastosCobranza ? totalCuota :
+                    totalCuotabd.subtract(
+                            BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN)
+                                    .multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza))
+                    ).floatValue();
+            float saneamientoConGastosCobranza = meses <= mesesConGastosCobranza ? totalSaneamiento :
+                    totalSaneamientobd.subtract(
+                            BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN)
+                                    .multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza))
+                    ).floatValue();
 
             if (parametroGastosCobransa != null && !contrato.getToma().getEspecial()) {
                 totalGastosCobranza = (tarifaConGastosCobranza + saneamientoConGastosCobranza + totalRecargos) * parametroGastosCobransa.getCantidad();
             }
         }
 
+
+        // termina bloque de cuota fija
+
         Deuda deuda = new Deuda();
+        Concepto conceptoParticular;
 
         // verificar si descuento de 12x11 esta activo; aplicarlo en caso de estar activo
-        Concepto conceptoParticular;
 
         // buscar concepto de  descuento por campaña promocional anual en caso de estar activo.
         // valor nulo en caso contrario
-        conceptoParticular = findConceptoDescuento12x11(contrato, deuda);
+
+        conceptoParticular = findConceptoDescuento12x11(contrato, fechaUltimoPago);
+
         if (conceptoParticular != null) {
             deuda.getConceptos().add(conceptoParticular);
-            deuda.setTotalPagar(deuda.getTotalPagar() + conceptoParticular.getCosto());
+            deuda.setTotalPagar(
+                    BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
+                            .add(BigDecimal.valueOf(conceptoParticular.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
+                            .floatValue()
+            );
         }
 
         if (!contrato.getToma().getEspecial()) {
             conceptoParticular = new Concepto();
             conceptoParticular.setCvconcepto(contrato.getToma().getTieneMedidor() ? 3 : 5);
             conceptoParticular.setDescripcion(contrato.getToma().getTieneMedidor() ? "CONSUMO" : "CUOTA FIJA");
-            conceptoParticular.setCosto(deuda.getTotalCuotaOConsumo());
+            conceptoParticular.setCosto(totalCuota);
             deuda.getConceptos().add(conceptoParticular);
+
+            if (contrato.getToma().getSaneamiento()) {
+                conceptoParticular = new Concepto();
+                conceptoParticular.setCvconcepto(19);
+                conceptoParticular.setDescripcion("SANEAMIENTO");
+                conceptoParticular.setCosto(totalSaneamiento);
+                deuda.getConceptos().add(conceptoParticular);
+            }
+
+            if (totalRecargos > 0) {
+                conceptoParticular = new Concepto();
+                conceptoParticular.setCvconcepto(17);
+                conceptoParticular.setDescripcion("RECARGOS");
+                conceptoParticular.setCosto(totalRecargos);
+                deuda.getConceptos().add(conceptoParticular);
+
+                conceptoParticular = findConceptoDescuentoRecargos(totalRecargos, departamento);
+                if (conceptoParticular != null) {
+                    deuda.getConceptos().add(conceptoParticular);
+                    deuda.setTotalPagar(
+                            BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
+                                    .add(BigDecimal.valueOf(conceptoParticular.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
+                                    .floatValue()
+                    );
+                }
+            }
+
+            if (totalGastosCobranza > 0) {
+                conceptoParticular = new Concepto();
+                conceptoParticular.setCvconcepto(8);
+                conceptoParticular.setDescripcion("GASTOS DE COBRANZA");
+                conceptoParticular.setCosto(totalGastosCobranza);
+                deuda.getConceptos().add(conceptoParticular);
+
+                conceptoParticular = findConceptoDescuentoGastosCobranza(totalGastosCobranza, departamento);
+                if (conceptoParticular != null) {
+                    deuda.getConceptos().add(conceptoParticular);
+                    deuda.setTotalPagar(
+                            BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
+                                    .add(BigDecimal.valueOf(conceptoParticular.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
+                                    .floatValue()
+                    );
+                }
+            }
+
+            List<Concepto> conceptos = findAllConcepto(contrato.getCvcontrato());
+            deuda.getConceptos().addAll(conceptos);
+            for (Concepto concepto : conceptos) {
+                deuda.setTotalPagar(
+                        BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
+                                .add(BigDecimal.valueOf(concepto.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
+                                .floatValue()
+                );
+            }
+
+        } else {
+            float totalConsumoCuota;
+            List<Concepto> conceptos = findAllConcepto(contrato.getCvcontrato());
+            totalConsumoCuota = conceptos.stream().map(Concepto::getCosto).reduce(Float::sum).orElse(0f);
+            totalConsumoCuota += contrato.getConvenio().getPorPagar();
+            conceptoParticular = new Concepto();
+            conceptoParticular.setCvconcepto(contrato.getToma().getTieneMedidor() ? 3 : 5);
+            conceptoParticular.setDescripcion(contrato.getToma().getTieneMedidor() ? "CONSUMO" : "CUOTA FIJA");
+            conceptoParticular.setCosto(
+                    BigDecimal.valueOf(totalCuota).setScale(2, RoundingMode.HALF_DOWN)
+                            .add(BigDecimal.valueOf(totalConsumoCuota).setScale(2, RoundingMode.HALF_DOWN))
+                            .add(BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN))
+                            .add(BigDecimal.valueOf(totalGastosCobranza).setScale(2, RoundingMode.HALF_DOWN))
+                            .floatValue()
+            );
+            conceptos.add(conceptoParticular);
 
             if (contrato.getToma().getSaneamiento()) {
                 conceptoParticular = new Concepto();
@@ -328,87 +426,81 @@ public class ContratoService {
                 conceptoParticular.setCosto(deuda.getTotalSaneamiento());
                 deuda.getConceptos().add(conceptoParticular);
             }
+        }
 
-            if (deuda.getTotalRecargos() > 0) {
-                conceptoParticular = new Concepto();
-                conceptoParticular.setCvconcepto(17);
-                conceptoParticular.setDescripcion("RECARGOS");
-                conceptoParticular.setCosto(deuda.getTotalRecargos());
-                deuda.getConceptos().add(conceptoParticular);
-
-                conceptoParticular = findConceptoDescuentoRecargos(deuda.getTotalRecargos(), departamento);
-                if (conceptoParticular != null) {
-                    deuda.getConceptos().add(conceptoParticular);
-                    deuda.setTotalPagar(deuda.getTotalPagar() + conceptoParticular.getCosto());
-                }
-            }
-
-            if (deuda.getTotalGastosCobranza() > 0) {
-                conceptoParticular = new Concepto();
-                conceptoParticular.setCvconcepto(8);
-                conceptoParticular.setDescripcion("GASTOS DE COBRANZA");
-                conceptoParticular.setCosto(deuda.getTotalGastosCobranza());
-                deuda.getConceptos().add(conceptoParticular);
-
-                conceptoParticular = findConceptoDescuentoGastosCobranza(deuda.getTotalRecargos(), departamento);
-                if (conceptoParticular != null) {
-                    deuda.getConceptos().add(conceptoParticular);
-                    deuda.setTotalPagar(deuda.getTotalPagar() + conceptoParticular.getCosto());
-                }
-            }
+        Query querySaldoAFavor = entityManager.createNamedQuery("findSaldoAFavorConcepto");
+        querySaldoAFavor.setParameter(1, contrato.getCvcontrato());
+        List<?> querySaldoAFavorResult = querySaldoAFavor.getResultList();
+        if (!querySaldoAFavorResult.isEmpty()) {
+            conceptoParticular = (Concepto) querySaldoAFavorResult.get(0);
+            deuda.getConceptos().add(conceptoParticular);
+            deuda.setTotalPagar(
+                    BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
+                            .add(BigDecimal.valueOf(conceptoParticular.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
+                            .floatValue()
+            );
         }
 
 
-        deuda.setTarifaMensual(giroTarifaActual);
-        deuda.setSaneamientoMensual(giroSaneamientoActual);
+        deuda.setTarifaMensual(contrato.getToma().getTarifaActual());
+        deuda.setSaneamientoMensual(contrato.getToma().getSaneamientoGiro());
         deuda.setTotalGastosCobranza(totalGastosCobranza);
         deuda.setTotalRecargos(totalRecargos);
         deuda.setTotalSaneamiento(totalSaneamiento);
         deuda.setTotalCuotaOConsumo(totalCuota);
-        deuda.setTotalPagar(totalCuota + totalSaneamiento + totalRecargos + totalGastosCobranza);
+        deuda.setTotalPagar(
+                BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
+                        .add(BigDecimal.valueOf(totalCuota).setScale(2, RoundingMode.HALF_DOWN))
+                        .add(BigDecimal.valueOf(totalSaneamiento).setScale(2, RoundingMode.HALF_DOWN))
+                        .add(BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN))
+                        .add(BigDecimal.valueOf(totalGastosCobranza).setScale(2, RoundingMode.HALF_DOWN))
+                        .floatValue()
+        );
         deuda.setFechaCubre(fechaUltimoPago);
-        deuda.setFechaUltimoPago(fechaUltimoPago);
+        deuda.setFechaUltimoPago(LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatterReturn));
         return deuda;
     }
 
-    private Concepto findConceptoDescuento12x11(Contrato contrato, Deuda deuda) {
+    private Concepto findConceptoDescuento12x11(Contrato contrato, LocalDate fechaCubre) {
         boolean promotionActiva;
         String fechaFinPromocion;
-        Query queryDescuento12x11 = entityManager.createNativeQuery("SELECT activapromocion, fehcadetiene FROM datosagua");
+        float tarifaMensual = BigDecimal.valueOf(contrato.getToma().getTarifaActual()).setScale(2, RoundingMode.HALF_DOWN)
+                .multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia())).floatValue();
+        float saneamientoMensual = contrato.getToma().getSaneamientoGiro();
+        LocalDate fechaUltimoPago = LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatterReturn);
+        Query queryDescuento12x11 = entityManager.createNativeQuery("SELECT CASE WHEN activapromocion = 'SI' THEN 1 ELSE 0 END AS activapromocion, fechadetiene FROM datosagua");
         @SuppressWarnings("unchecked")
         List<Object[]> resultQueryDescuento12x11 = (List<Object[]>) queryDescuento12x11.getResultList();
         if (resultQueryDescuento12x11.isEmpty()) {
             return null;
         }
-        promotionActiva = (boolean) resultQueryDescuento12x11.get(0)[0];
+        promotionActiva = (int) resultQueryDescuento12x11.get(0)[0] == 1;
         fechaFinPromocion = (String) resultQueryDescuento12x11.get(0)[1];
 
         if (!promotionActiva) {
             return null;
         }
         boolean promocionActivaParaGiro = false;
-        Query queryAplicaDiciembre = entityManager.createNativeQuery("SELECT aplicadiciembre" +
+        Query queryAplicaDiciembre = entityManager.createNativeQuery("SELECT CASE WHEN aplicadiciembre = 'SI' THEN 1 ELSE 0 END" +
                 " FROM giros WHERE cvgiros = ?");
         queryAplicaDiciembre.setParameter(1, contrato.getToma().getCvgiro());
-        @SuppressWarnings("unchecked")
-        List<Object[]> resultQueryAplicaDiciembre = (List<Object[]>) queryAplicaDiciembre.getResultList();
+        List<?> resultQueryAplicaDiciembre = (List<?>) queryAplicaDiciembre.getResultList();
         if (!resultQueryAplicaDiciembre.isEmpty()) {
-            promocionActivaParaGiro = (boolean) resultQueryAplicaDiciembre.get(0)[0];
+            promocionActivaParaGiro = ((int) resultQueryAplicaDiciembre.get(0)) == 1;
         }
 
         if (!promocionActivaParaGiro) {
             return null;
         }
-        boolean esAreaComun = false;
+        boolean esAreaComun;
         Query queryEsAreaComun = entityManager.createNativeQuery(" SELECT  COUNT(*) AS counter" +
                 " FROM DatClientes c JOIN DatTomas t ON c.cvcliente = t.cvcliente" +
                 " WHERE t.cvcontrato = ?" +
                 " AND CONCAT(nombre, ' ', appaterno, ' ', apmaterno) LIKE '%AREA COMUN%'");
         queryEsAreaComun.setParameter(1, contrato.getCvcontrato());
         List<?> resultQueryEsAreaComun = queryEsAreaComun.getResultList();
-        if (!resultQueryEsAreaComun.isEmpty()) {
-            esAreaComun = (boolean) resultQueryEsAreaComun.get(0);
-        }
+        esAreaComun = !resultQueryEsAreaComun.isEmpty() && ((int) resultQueryEsAreaComun.get(0)) > 0;
+
         //no aplicable a contrato perteneciente a AREA COMUN
         if (esAreaComun) {
             return null;
@@ -416,24 +508,27 @@ public class ContratoService {
         LocalDate fechaFinPromocionTyped = LocalDate.parse(fechaFinPromocion, formatterReturn);
         fechaFinPromocionTyped = LocalDate.of(fechaFinPromocionTyped.getYear(), 12, 31);
 
-        if (deuda.getFechaCubre().getMonth() != fechaFinPromocionTyped.getMonth() ||
-                deuda.getFechaCubre().getYear() != fechaFinPromocionTyped.getYear()) {
-            return null;
+        if (fechaCubre.getMonth() == fechaFinPromocionTyped.getMonth() && fechaCubre.getYear() == fechaFinPromocionTyped.getYear()) {
+            String nombrePromocion = "";
+            // obtener descripcion del conceto DESCUENTO ANUAL
+            Query queryDescuentoAnual = entityManager.createNativeQuery("SELECT descripcion" +
+                    " FROM conceptospago WHERE cvconcepto='70'");
+            List<?> resultQueryDescuentoAnual = queryDescuentoAnual.getResultList();
+            if (!resultQueryDescuentoAnual.isEmpty()) {
+                nombrePromocion = (String) resultQueryDescuentoAnual.get(0);
+            }
+            // Concepto de descuento 12x11
+            Concepto concepto = new Concepto();
+            concepto.setCvconcepto(70);
+            concepto.setDescripcion(nombrePromocion);
+            concepto.setCosto(
+                    BigDecimal.valueOf(tarifaMensual).setScale(2, RoundingMode.HALF_DOWN)
+                            .add(BigDecimal.valueOf(saneamientoMensual).setScale(2, RoundingMode.HALF_DOWN))
+                            .floatValue() * -1f
+            );
+            return concepto;
         }
-        String nombrePromocion = "";
-        // obtener descripcion del conceto DESCUENTO ANUAL
-        Query queryDescuentoAnual = entityManager.createNativeQuery("SELECT descripcion" +
-                " FROM conceptos WHERE cvconcepto='70'");
-        List<?> resultQueryDescuentoAnual = queryDescuentoAnual.getResultList();
-        if (!resultQueryDescuentoAnual.isEmpty()) {
-            nombrePromocion = (String) resultQueryDescuentoAnual.get(0);
-        }
-        // Concepto de descuento 12x11
-        Concepto concepto = new Concepto();
-        concepto.setCvconcepto(70);
-        concepto.setDescripcion(nombrePromocion);
-        concepto.setCosto((deuda.getTarifaMensual()) + deuda.getSaneamientoMensual() * -1);
-        return concepto;
+        return null;
     }
 
 
@@ -441,10 +536,10 @@ public class ContratoService {
         if (departamento != Departamento.CENTRO)
             return null;
         Query queryIsPromotionActive = entityManager.createNativeQuery("SELECT TOP 1" +
-                " CASE WHEN promtodo = 'SI' THEN 1 ELSE 0 " +
-                " FROM Datosagua", Boolean.class);
+                " CASE WHEN promtodo = 'SI' THEN 1 ELSE 0 END" +
+                " FROM Datosagua", Integer.class);
         List<?> resultIsPromotionActive = queryIsPromotionActive.getResultList();
-        boolean isPromotionActive = !resultIsPromotionActive.isEmpty() && (boolean) resultIsPromotionActive.get(0);
+        boolean isPromotionActive = !resultIsPromotionActive.isEmpty() && ((int) resultIsPromotionActive.get(0)) == 1;
         if (!isPromotionActive)
             return null;
         Concepto conceptoPromotion = new Concepto();
@@ -458,10 +553,10 @@ public class ContratoService {
         if (departamento != Departamento.CENTRO)
             return null;
         Query queryIsPromotionActive = entityManager.createNativeQuery("SELECT TOP 1" +
-                " CASE WHEN promtodo = 'SI' THEN 1 ELSE 0 " +
-                " FROM Datosagua", Boolean.class);
+                " CASE WHEN promtodo = 'SI' THEN 1 ELSE 0 END" +
+                " FROM Datosagua", Integer.class);
         List<?> resultIsPromotionActive = queryIsPromotionActive.getResultList();
-        boolean isPromotionActive = !resultIsPromotionActive.isEmpty() && (boolean) resultIsPromotionActive.get(0);
+        boolean isPromotionActive = !resultIsPromotionActive.isEmpty() && ((int) resultIsPromotionActive.get(0)) == 1;
         if (!isPromotionActive)
             return null;
         Concepto conceptoPromotion = new Concepto();

@@ -14,7 +14,7 @@ public class Contrato {
     private Toma toma;
     private Ultimopago ultimoPago;
     private int mesesPorPagar;
-    private Concepto concepto;
+    private List<Concepto> conceptos;
     private Convenio convenio;
     private List<ParcialidadConcepto> parcialidadConceptos;
     private String fechaUltimoPago;

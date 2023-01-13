@@ -8,16 +8,17 @@ import lombok.Data;
 @NamedNativeQuery(name = "findToma",
         query = "SELECT t.cvcliente, t.calle, t.numint" +
                 ", CASE WHEN conmedidor = 'SI' THEN 1 ELSE 0 END AS tieneMedidor" +
-                ", CASE WHEN t.saneamiento = 'SI' THEN 1 ELSE 0 AS saneamiento, t.numfamilia" +
+                ", CASE WHEN t.saneamiento = 'SI' THEN 1 ELSE 0 END AS saneamiento, t.numfamilia" +
                 ", t.codpost AS codigoPostal, CASE WHEN t.apmanten = 'SI' THEN 1 ELSE 0 END AS especial" +
-                ", g.cvgiros as cvgiro, g.nombre as nombreGiro, g.tanterior AS tarifaAnterior, g.tarifactual AS tarifaActual, g.saneamiento AS saneamientoGiro" +
+                ", g.cvgiros as cvgiro, g.nombre AS nombreGiro, g.tanterior AS tarifaAnterior" +
+                ", g.tarifactual AS tarifaActual, g.saneamiento AS saneamientoGiro" +
                 ", g.totalconsane AS TarifaConSaneamiento" +
-                ", CASE WHEN g.descinap = 'SI' THEN 1 ELSE 0 AS descuentoInap" +
+                ", CASE WHEN g.descinap = 'SI' THEN 1 ELSE 0 END AS descuentoInap" +
                 ", estados.nombre AS nombreEstado" +
                 ", municipios.nombre AS nombreMunicipio" +
                 ", colonia.cvcolonia, colonia.nombre AS nombreColonia" +
                 ", localidad.nombre AS nombreLocalidad" +
-                ", status.nombre as nombreEstatus" +
+                ", status.nombre AS nombreEstatus" +
                 ", t.observa, g.fecvigencia AS fechaVigenciaTarifaGiro" +
                 ", g.fechasaneamiento AS fechaVigenciaSaneamientoGiro" +
                 " FROM dattomas t" +

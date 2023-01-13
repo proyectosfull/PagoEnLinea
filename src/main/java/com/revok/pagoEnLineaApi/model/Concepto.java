@@ -5,8 +5,8 @@ import lombok.Data;
 
 @Data
 @Entity
-@NamedNativeQuery(name = "findConceptosPago",
-        query = " SELECT TOP 1 c.cvconcepto, c.descripcion, SUM(p.costo) AS costo" +
+@NamedNativeQuery(name = "findAllConcepto",
+        query = " SELECT c.cvconcepto, c.descripcion, SUM(p.costo) AS costo" +
                 " FROM PagosConceptos p" +
                 " LEFT JOIN ConceptosPago c ON p.cvconcepto = c.cvconcepto" +
                 " WHERE (status <> 'PAGADO' AND status <> 'CANCELADO')" +
@@ -14,9 +14,16 @@ import lombok.Data;
                 " AND p.costo != 0 AND cvcontrato = ?" +
                 " GROUP BY c.cvconcepto, c.descripcion" +
                 " ORDER BY c.descripcion ASC",
-        resultSetMapping = "findConceptosPagoMapping"
+        resultSetMapping = "findAllConceptoMapping"
 )
-@SqlResultSetMapping(name = "findConceptosPagoMapping",
+@NamedNativeQuery(name = "findSaldoAFavorConcepto",
+        query = " SELECT (SELECT TOP 1 cvconcepto FROM conceptospago WHERE descripcion LIKE '%SALDO%') AS cvconcepto" +
+                ", 'SALDO A FAVOR' AS descripcion, saldoafavor AS costo" +
+                " FROM SaldoaFavor" +
+                " WHERE cvcontrato = ?",
+        resultSetMapping = "findAllConceptoMapping"
+)
+@SqlResultSetMapping(name = "findAllConceptoMapping",
         classes = @ConstructorResult(
                 targetClass = Concepto.class,
                 columns = {
