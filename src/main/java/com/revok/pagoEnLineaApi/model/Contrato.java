@@ -10,7 +10,7 @@ public class Contrato {
     private String cvcontrato;
     private Propietario propietario;
     private Factura factura;
-    private ReferenciaBancaria referenciaBancaria;
+    private String referenciaBancaria;
     private Toma toma;
     private Ultimopago ultimoPago;
     private int mesesPorPagar;

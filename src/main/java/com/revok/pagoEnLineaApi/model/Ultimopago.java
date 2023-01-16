@@ -21,15 +21,6 @@ import lombok.Data;
                         @ColumnResult(name = "fechaRegistro"),
                 }
         ))
-@NamedNativeQuery(name = "findFechaCubreFromLecturas",
-        query = "SELECT TOP 1 feclectura" +
-                " FROM lecturas" +
-                " WHERE cvcontrato = ? AND cvstatus='PAGADO'" +
-                " ORDER BY fcodlectura desc")
-@NamedNativeQuery(name = "findFechaCubreFromControlTomas",
-        query = "SELECT TOP 1 fechacubre" +
-                " FROM ControlTomas" +
-                " WHERE cvcontrato = ?")
 public class Ultimopago {
     @Id
     private Integer numeroRecibo;

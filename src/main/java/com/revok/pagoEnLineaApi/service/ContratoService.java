@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -20,8 +21,39 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class ContratoService {
     private final EntityManager entityManager;
-    private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", new Locale("spa", "MX"));
-    private final DateTimeFormatter formatterReturn = DateTimeFormatter.ofPattern("dd/MM/yyyy", new Locale("spa", "MX"));
+    private final ZoneId defaultZoneId = ZoneId.of("America/Mexico_City");
+    private final Locale defaultLocale = new Locale("spa", "MX");
+    private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", defaultLocale);
+    private final DateTimeFormatter formatterReturn = DateTimeFormatter.ofPattern("dd/MM/yyyy", defaultLocale);
+
+    public Contrato maxDeuda() {
+        Query query = entityManager.createNativeQuery("SELECT cvcontrato FROM dattomas", String.class);
+        @SuppressWarnings("unchecked")
+        List<String> cvcontratos = query.getResultList();
+        System.out.println("totalContratos: " + cvcontratos.size());
+        int i = 0;
+        Contrato contratoMax = new Contrato();
+        contratoMax.setMesesPorPagar(0);
+        for (String cvcontrato : cvcontratos) {
+            System.out.println("i: " + i);
+            i++;
+            Contrato contrato = new Contrato();
+            contrato.setCvcontrato(cvcontrato);
+            contrato.setToma(findToma(cvcontrato));
+            contrato.setUltimoPago(findUltimoPago(cvcontrato, contrato.getToma().getTieneMedidor()));
+            if (contrato.getUltimoPago() == null)
+                continue;
+            try {
+                contrato.setMesesPorPagar(findMesesPorPagar(cvcontrato, contrato.getToma().getTieneMedidor(), contrato.getUltimoPago().getFechaCubre()));
+                if (contratoMax.getMesesPorPagar() < contrato.getMesesPorPagar())
+                    contratoMax = contrato;
+            } catch (Exception ignored) {
+            }
+        }
+        System.out.println("max cvcontrato: " + contratoMax.getCvcontrato());
+        System.out.println("max meses: " + contratoMax.getMesesPorPagar());
+        return contratoMax;
+    }
 
     public Propietario findPropietario(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findPropietario");
@@ -35,76 +67,93 @@ public class ContratoService {
         return (Factura) query.getSingleResult();
     }
 
-    public ReferenciaBancaria findReferenciaBancaria(String cvcontrato, Departamento departamento) {
+    public String findReferenciaBancaria(String cvcontrato, Departamento departamento) {
         if (departamento != Departamento.CENTRO)
-            return new ReferenciaBancaria();
-        Query query = entityManager.createNamedQuery("findReferenciaBancaria");
-        query.setParameter(1, cvcontrato);
-        query.setParameter(2, LocalDate.now().format(formatter));
-        List<?> result = query.getResultList();
-        if (result.isEmpty())
             return null;
-        return (ReferenciaBancaria) result.get(0);
+        Query query = entityManager.createNativeQuery(
+                "SELECT TOP 1 CONCAT(digitosLibres, digitosFecha, digitosImporte, digitosReferencia) AS referencia" +
+                        " FROM HistorialReferenciasCIE" +
+                        " WHERE cvcontrato = ?" +
+                        " AND CONVERT(date, fechaVigencia) >= ?", String.class);
+        query.setParameter(1, cvcontrato);
+        query.setParameter(2, LocalDate.now(defaultZoneId).format(formatter));
+        List<?> result = query.getResultList();
+
+        // return null if result list or object result string is empty
+        return result.isEmpty() ? null : ((String) result.get(0)).isEmpty() ? null : (String) result.get(0);
     }
 
     public Ultimopago findUltimoPago(String cvcontrato, Boolean tieneMedidor) {
         Query query = entityManager.createNamedQuery("findUltimoPago");
         query.setParameter(1, cvcontrato);
-        Ultimopago ultimopago = (Ultimopago) query.getSingleResult();
+        List<?> resultQueryUltimoPago = query.getResultList();
+        Ultimopago ultimopago = resultQueryUltimoPago.isEmpty() ? null : (Ultimopago) resultQueryUltimoPago.get(0);
+        if (ultimopago == null)
+            return null;
+
+        Query queryFechaCubreFromLecturas = entityManager.createNativeQuery(
+                "SELECT TOP 1 feclectura" +
+                        " FROM lecturas" +
+                        " WHERE cvcontrato = ? AND cvstatus='PAGADO'" +
+                        " ORDER BY fcodlectura desc");
+
+        Query queryFechaCubreFromTomas = entityManager.createNativeQuery(
+                "SELECT TOP 1 fechacubre" +
+                        " FROM ControlTomas" +
+                        " WHERE cvcontrato = ?");
+
         // si tiene medidor, la fecha de cobertura se obtiene de las lecturas
         // de lo contrario, se obtiene del control de tomas
-        Query queryFechaCubre =
-                tieneMedidor ? entityManager.createNamedQuery("findFechaCubreFromLecturas") :
-                        entityManager.createNamedQuery("findFechaCubreFromControlTomas");
+        Query queryFechaCubre = tieneMedidor ? queryFechaCubreFromLecturas : queryFechaCubreFromTomas;
         queryFechaCubre.setParameter(1, cvcontrato);
-        ultimopago.setFechaCubre((String) queryFechaCubre.getSingleResult());
+        List<?> result = queryFechaCubre.getResultList();
+        ultimopago.setFechaCubre((String) (result.isEmpty() ? null : result.get(0)));
+
 
         // si el último pago no existe o incluye fecha default, se aplica fecha de cobertura del control de tomas
-        if (ultimopago.getFechaCubre().equals("0/0/0") || ultimopago.getFechaCubre().equals(""))
-            ultimopago.setFechaCubre((String) entityManager.createNamedQuery("findFechaCubreFromControlTomas").getSingleResult());
+        if (ultimopago.getFechaCubre() == null || ultimopago.getFechaCubre().isEmpty() || ultimopago.getFechaCubre().equals("0/0/0")) {
+            queryFechaCubre = queryFechaCubreFromTomas;
+            queryFechaCubre.setParameter(1, cvcontrato);
+            result = queryFechaCubre.getResultList();
+            ultimopago.setFechaCubre((String) (result.isEmpty() ? null : result.get(0)));
+        }
+
         // se aplica formato de fecha al dato antes de retornarlo
-        ultimopago.setFechaCubre(LocalDate.parse(ultimopago.getFechaCubre(), formatterReturn).format(formatterReturn));
+        //* se estima que el aplicar el mismo formato es innecesario. comprobar
+        // ultimopago.setFechaCubre(LocalDate.parse(ultimopago.getFechaCubre(), formatterReturn).format(formatterReturn));
         return ultimopago;
     }
 
     public int findMesesPorPagar(String cvcontrato, Boolean tieneMedidor, String fechaCubre) {
-        int mesesPorPagar;
-        if (tieneMedidor) {
-            Query query = entityManager.createNativeQuery("SELECT COUNT(*) FROM lecturas WHERE cvcontrato = ? AND cvstatus = 'POR PAGAR'", Integer.class);
-            query.setParameter(1, cvcontrato);
-            mesesPorPagar = (int) query.getSingleResult();
-        } else {
-            LocalDate now = LocalDate.now();
-            LocalDate fechaCubreTyped = LocalDate.parse(fechaCubre, formatterReturn);
-            mesesPorPagar = (int) ChronoUnit.MONTHS.between(
-                    YearMonth.from(fechaCubreTyped),
-                    YearMonth.from(now)
-            );
+        if (!tieneMedidor) {
+            // distance from fechaCubre and now in months
+            return (int) ChronoUnit.MONTHS.between(YearMonth.parse(fechaCubre, formatterReturn), YearMonth.now(defaultZoneId));
         }
-        return mesesPorPagar;
+        Query query = entityManager.createNativeQuery("SELECT COUNT(*) FROM lecturas WHERE cvcontrato = ? AND cvstatus = 'POR PAGAR'", Integer.class);
+        query.setParameter(1, cvcontrato);
+        List<?> result = query.getResultList();
+        return result.isEmpty() ? 0 : (int) result.get(0);
     }
 
     @SuppressWarnings("unchecked")
     public List<Concepto> findAllConcepto(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findAllConcepto");
         query.setParameter(1, cvcontrato);
-        return (List<Concepto>) query.getResultList();
+        return query.getResultList();
     }
 
     public Convenio findConvenio(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findConvenio");
         query.setParameter(1, cvcontrato);
         List<?> result = query.getResultList();
-        if (result.isEmpty())
-            return null;
-        return (Convenio) result.get(0);
+        return result.isEmpty() ? null : (Convenio) result.get(0);
     }
 
     @SuppressWarnings("unchecked")
     public List<ParcialidadConcepto> findAllParcialidadConcepto(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findAllParcialidadConcepto");
         query.setParameter(1, cvcontrato);
-        return (List<ParcialidadConcepto>) query.getResultList();
+        return query.getResultList();
     }
 
     public String findFechaUltimoPago(String cvcontrato) {
@@ -114,22 +163,18 @@ public class ContratoService {
                 " ORDER BY d.fechacod DESC", String.class);
         query.setParameter(1, cvcontrato);
         List<?> result = query.getResultList();
-        if (result.isEmpty())
-            return null;
-        return (String) result.get(0);
+        return result.isEmpty() ? null : (String) result.get(0);
     }
 
     public Mensaje findMensaje(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findMensaje");
         query.setParameter(1, cvcontrato);
         List<?> result = query.getResultList();
-        if (result.isEmpty())
-            return null;
-        return (Mensaje) result.get(0);
+        return result.isEmpty() ? null : (Mensaje) result.get(0);
     }
 
     public boolean existsHistorioAuxiliar(String cvcontrato) {
-        Query query = entityManager.createNativeQuery(" SELECT * FROM HistoricoAuxiliar " +
+        Query query = entityManager.createNativeQuery(" SELECT cvcontrato FROM HistoricoAuxiliar " +
                 " WHERE cvcontrato = ?" +
                 " AND (CONVERT(money, importe_v) + CONVERT(money, importe_a)) != 0 AND estatus='A'");
         query.setParameter(1, cvcontrato);
@@ -142,22 +187,21 @@ public class ContratoService {
             return new ArrayList<>();
         Query query = entityManager.createNamedQuery("findAllHistoricoAuxiliar");
         query.setParameter(1, cvcontrato);
-        return (List<HistoricoAuxiliar>) query.getResultList();
+        return query.getResultList();
     }
 
     public Toma findToma(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findToma");
         query.setParameter(1, cvcontrato);
-        return (Toma) query.getSingleResult();
+        List<?> result = query.getResultList();
+        return result.isEmpty() ? null : (Toma) result.get(0);
     }
 
     public UltimaLectura findUltimaLectura(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findUltimaLectura");
         query.setParameter(1, cvcontrato);
         List<?> result = query.getResultList();
-        if (result.isEmpty())
-            return null;
-        return (UltimaLectura) result.get(0);
+        return result.isEmpty() ? null : (UltimaLectura) result.get(0);
     }
 
     public Contrato findContrato(String cvcontrato, Departamento departamento) {
@@ -174,9 +218,8 @@ public class ContratoService {
         contrato.setParcialidadConceptos(findAllParcialidadConcepto(cvcontrato));
         contrato.setFechaUltimoPago(findFechaUltimoPago(cvcontrato));
         contrato.setMensaje(findMensaje(cvcontrato));
-        if (contrato.getToma() != null && contrato.getToma().getTieneMedidor()) {
+        if (contrato.getToma() != null && contrato.getToma().getTieneMedidor())
             contrato.setUltimaLectura(findUltimaLectura(cvcontrato));
-        }
         contrato.setHistoricoAuxiliar(findAllHistoricoAuxiliar(cvcontrato));
         return contrato;
     }
@@ -186,10 +229,14 @@ public class ContratoService {
         return entityManager.createNamedQuery("findAllParametro").getResultList();
     }
 
-    public Deuda findCuentaPorPagarFromMonths(Contrato contrato, int meses, Departamento departamento) {
+    public Deuda findCuentaPorPagarFromMonths(Contrato contrato, Departamento departamento, int meses) {
+        // if meses comes with 0 then set mesesPorPagar from contrato
         meses = meses > 0 ? meses : contrato.getMesesPorPagar();
 
         List<Parametro> parametros = findAllParametro();
+        // assert parametros values exists
+        if (parametros.isEmpty())
+            return null;
         Parametro parametroRecargo = parametros.stream().filter(p -> p.getCvparam().equals(Parametro.ParametroType.RECA.name())).findAny().orElse(null);
         Parametro parametroMesesGastosCobransa = parametros.stream().filter(p -> p.getCvparam().equals(Parametro.ParametroType.MESESGE.name())).findAny().orElse(null);
         Parametro parametroGastosCobransa = parametros.stream().filter(p -> p.getCvparam().equals(Parametro.ParametroType.GE.name())).findAny().orElse(null);
@@ -222,14 +269,14 @@ public class ContratoService {
         }
 
         BigDecimal totalCuotabd = new BigDecimal("0");
-        float totalCuota = 0;
-        float totalSaneamiento = 0;
+        float totalCuota = 0f;
+        float totalSaneamiento = 0f;
         BigDecimal totalSaneamientobd = new BigDecimal("0");
-        float totalGastosCobranza = 0;
-        float totalRecargos = 0;
+        float totalGastosCobranza = 0f;
+        float totalRecargos = 0f;
 
         float tarifa = 0f;
-        float saneamiento = 0;
+        float saneamiento = 0f;
 
         // empieza bloque de cuota fija
 
@@ -251,7 +298,7 @@ public class ContratoService {
                 );
                 List<?> queryTarifaResult = queryTarifa.getResultList();
                 tarifa = queryTarifaResult.isEmpty() ? 0f : (float) queryTarifaResult.get(0);
-                totalCuotabd = totalCuotabd.add(BigDecimal.valueOf(tarifa));
+                totalCuotabd = totalCuotabd.add(BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN));
 
                 Query querySaneamiento = entityManager.createNativeQuery(" SELECT TOP 1 tsane_actual" +
                         " FROM tarifas WHERE cvgiro = ?" +
@@ -272,7 +319,12 @@ public class ContratoService {
                 // (cuando sea igual a los meses de deuda se asimila que es el
                 // mes corriente y no se agrega recargo).
                 if (i < mesesDeuda && !contrato.getToma().getEspecial() && parametroRecargo != null) {
-                    totalRecargos += (tarifa + saneamiento) * parametroRecargo.getCantidad();
+                    totalRecargos = BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN)
+                            .add(BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN)
+                                    .add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN))
+                                    .multiply(BigDecimal.valueOf(parametroRecargo.getCantidad())))
+                            .setScale(2, RoundingMode.HALF_DOWN)
+                            .floatValue();
                 }
                 fechaUltimoPago = fechaUltimoPago.plus(1, ChronoUnit.MONTHS);
             }
@@ -287,7 +339,12 @@ public class ContratoService {
                 totalSaneamientobd = totalSaneamientobd.add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN));
 
                 if (i < mesesDeuda && !contrato.getToma().getEspecial() && parametroRecargo != null) {
-                    totalRecargos += (tarifa + saneamiento) * parametroRecargo.getCantidad();
+                    totalRecargos = BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN)
+                            .add(BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN)
+                                    .add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN))
+                                    .multiply(BigDecimal.valueOf(parametroRecargo.getCantidad())))
+                            .setScale(2, RoundingMode.HALF_DOWN)
+                            .floatValue();
                 }
             }
         }
@@ -315,7 +372,13 @@ public class ContratoService {
                     ).floatValue();
 
             if (parametroGastosCobransa != null && !contrato.getToma().getEspecial()) {
-                totalGastosCobranza = (tarifaConGastosCobranza + saneamientoConGastosCobranza + totalRecargos) * parametroGastosCobransa.getCantidad();
+                totalGastosCobranza =
+                        BigDecimal.valueOf(tarifaConGastosCobranza).setScale(2, RoundingMode.HALF_DOWN)
+                                .add(BigDecimal.valueOf(saneamientoConGastosCobranza).setScale(2, RoundingMode.HALF_DOWN))
+                                .add(BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN))
+                                .multiply(BigDecimal.valueOf(parametroGastosCobransa.getCantidad()))
+                                .setScale(2, RoundingMode.HALF_DOWN)
+                                .floatValue();
             }
         }
 
@@ -462,73 +525,64 @@ public class ContratoService {
     }
 
     private Concepto findConceptoDescuento12x11(Contrato contrato, LocalDate fechaCubre) {
-        boolean promotionActiva;
-        String fechaFinPromocion;
         float tarifaMensual = BigDecimal.valueOf(contrato.getToma().getTarifaActual()).setScale(2, RoundingMode.HALF_DOWN)
                 .multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia())).floatValue();
         float saneamientoMensual = contrato.getToma().getSaneamientoGiro();
-        LocalDate fechaUltimoPago = LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatterReturn);
         Query queryDescuento12x11 = entityManager.createNativeQuery("SELECT CASE WHEN activapromocion = 'SI' THEN 1 ELSE 0 END AS activapromocion, fechadetiene FROM datosagua");
         @SuppressWarnings("unchecked")
-        List<Object[]> resultQueryDescuento12x11 = (List<Object[]>) queryDescuento12x11.getResultList();
+        List<Object[]> resultQueryDescuento12x11 = queryDescuento12x11.getResultList();
         if (resultQueryDescuento12x11.isEmpty()) {
             return null;
         }
-        promotionActiva = (int) resultQueryDescuento12x11.get(0)[0] == 1;
-        fechaFinPromocion = (String) resultQueryDescuento12x11.get(0)[1];
 
-        if (!promotionActiva) {
+        boolean isPromocionActiva = ((int) resultQueryDescuento12x11.get(0)[0]) == 1;
+        String fechaFinPromocion = (String) resultQueryDescuento12x11.get(0)[1];
+        if (!isPromocionActiva) {
             return null;
         }
-        boolean promocionActivaParaGiro = false;
+
         Query queryAplicaDiciembre = entityManager.createNativeQuery("SELECT CASE WHEN aplicadiciembre = 'SI' THEN 1 ELSE 0 END" +
                 " FROM giros WHERE cvgiros = ?");
         queryAplicaDiciembre.setParameter(1, contrato.getToma().getCvgiro());
         List<?> resultQueryAplicaDiciembre = (List<?>) queryAplicaDiciembre.getResultList();
-        if (!resultQueryAplicaDiciembre.isEmpty()) {
-            promocionActivaParaGiro = ((int) resultQueryAplicaDiciembre.get(0)) == 1;
-        }
-
-        if (!promocionActivaParaGiro) {
+        if (resultQueryAplicaDiciembre.isEmpty() || ((int) resultQueryAplicaDiciembre.get(0)) == 0) {
             return null;
         }
-        boolean esAreaComun;
-        Query queryEsAreaComun = entityManager.createNativeQuery(" SELECT  COUNT(*) AS counter" +
+
+        Query queryIsAreaComun = entityManager.createNativeQuery(" SELECT COUNT(*) AS counter" +
                 " FROM DatClientes c JOIN DatTomas t ON c.cvcliente = t.cvcliente" +
                 " WHERE t.cvcontrato = ?" +
                 " AND CONCAT(nombre, ' ', appaterno, ' ', apmaterno) LIKE '%AREA COMUN%'");
-        queryEsAreaComun.setParameter(1, contrato.getCvcontrato());
-        List<?> resultQueryEsAreaComun = queryEsAreaComun.getResultList();
-        esAreaComun = !resultQueryEsAreaComun.isEmpty() && ((int) resultQueryEsAreaComun.get(0)) > 0;
+        queryIsAreaComun.setParameter(1, contrato.getCvcontrato());
+        List<?> resultQueryEsAreaComun = queryIsAreaComun.getResultList();
 
         //no aplicable a contrato perteneciente a AREA COMUN
-        if (esAreaComun) {
+        if (!resultQueryEsAreaComun.isEmpty() && ((int) resultQueryEsAreaComun.get(0)) > 0) {
             return null;
         }
+
+        // apply LocalDate type and set year and month to max values (end of year)
         LocalDate fechaFinPromocionTyped = LocalDate.parse(fechaFinPromocion, formatterReturn);
         fechaFinPromocionTyped = LocalDate.of(fechaFinPromocionTyped.getYear(), 12, 31);
-
-        if (fechaCubre.getMonth() == fechaFinPromocionTyped.getMonth() && fechaCubre.getYear() == fechaFinPromocionTyped.getYear()) {
-            String nombrePromocion = "";
-            // obtener descripcion del conceto DESCUENTO ANUAL
-            Query queryDescuentoAnual = entityManager.createNativeQuery("SELECT descripcion" +
-                    " FROM conceptospago WHERE cvconcepto='70'");
-            List<?> resultQueryDescuentoAnual = queryDescuentoAnual.getResultList();
-            if (!resultQueryDescuentoAnual.isEmpty()) {
-                nombrePromocion = (String) resultQueryDescuentoAnual.get(0);
-            }
-            // Concepto de descuento 12x11
-            Concepto concepto = new Concepto();
-            concepto.setCvconcepto(70);
-            concepto.setDescripcion(nombrePromocion);
-            concepto.setCosto(
-                    BigDecimal.valueOf(tarifaMensual).setScale(2, RoundingMode.HALF_DOWN)
-                            .add(BigDecimal.valueOf(saneamientoMensual).setScale(2, RoundingMode.HALF_DOWN))
-                            .floatValue() * -1f
-            );
-            return concepto;
+        if (fechaCubre.getMonth() != fechaFinPromocionTyped.getMonth() || fechaCubre.getYear() != fechaFinPromocionTyped.getYear()) {
+            return null;
         }
-        return null;
+
+        // obtener descripcion del concepto DESCUENTO ANUAL
+        Query queryDescuentoAnual = entityManager.createNativeQuery("SELECT descripcion FROM conceptospago WHERE cvconcepto='70'");
+        List<?> resultQueryDescuentoAnual = queryDescuentoAnual.getResultList();
+        String nombrePromocion = resultQueryDescuentoAnual.isEmpty() ? "" : (String) resultQueryDescuentoAnual.get(0);
+
+        // Concepto de descuento 12x11
+        Concepto concepto = new Concepto();
+        concepto.setCvconcepto(70);
+        concepto.setDescripcion(nombrePromocion);
+        concepto.setCosto(
+                BigDecimal.valueOf(tarifaMensual).setScale(2, RoundingMode.HALF_DOWN)
+                        .add(BigDecimal.valueOf(saneamientoMensual).setScale(2, RoundingMode.HALF_DOWN))
+                        .floatValue() * -1f
+        );
+        return concepto;
     }
 
 
@@ -539,8 +593,7 @@ public class ContratoService {
                 " CASE WHEN promtodo = 'SI' THEN 1 ELSE 0 END" +
                 " FROM Datosagua", Integer.class);
         List<?> resultIsPromotionActive = queryIsPromotionActive.getResultList();
-        boolean isPromotionActive = !resultIsPromotionActive.isEmpty() && ((int) resultIsPromotionActive.get(0)) == 1;
-        if (!isPromotionActive)
+        if (resultIsPromotionActive.isEmpty() || ((int) resultIsPromotionActive.get(0)) == 0)
             return null;
         Concepto conceptoPromotion = new Concepto();
         conceptoPromotion.setCvconcepto(91);
@@ -556,43 +609,51 @@ public class ContratoService {
                 " CASE WHEN promtodo = 'SI' THEN 1 ELSE 0 END" +
                 " FROM Datosagua", Integer.class);
         List<?> resultIsPromotionActive = queryIsPromotionActive.getResultList();
-        boolean isPromotionActive = !resultIsPromotionActive.isEmpty() && ((int) resultIsPromotionActive.get(0)) == 1;
-        if (!isPromotionActive)
+        if (resultIsPromotionActive.isEmpty() || ((int) resultIsPromotionActive.get(0)) == 0)
             return null;
         Concepto conceptoPromotion = new Concepto();
         conceptoPromotion.setCvconcepto(92);
         conceptoPromotion.setDescripcion("DESC. 50% DE GASTOS DE COBRANZA");
-        conceptoPromotion.setCosto((totalGastos * 0.5f) * -1);
+        conceptoPromotion.setCosto(
+                BigDecimal.valueOf(totalGastos).setScale(2, RoundingMode.HALF_DOWN)
+                        .multiply(new BigDecimal("0.5"))
+                        .setScale(2, RoundingMode.HALF_DOWN)
+                        .negate()
+                        .floatValue()
+        );
         return conceptoPromotion;
     }
 
     private float calcularMaxRangos(LocalDate fechaUltimoPago, LocalDate fechaVigente, float tarifaAnterior, float tarifaActual) {
-        int mesesConTarifaAnterior;
-        int mesesConTarifaActual;
-        float resultado;
         if (fechaUltimoPago.isBefore(fechaVigente)) {
             int mesesEntrePagoYVigente = (int) ChronoUnit.MONTHS.between(
                     YearMonth.from(fechaUltimoPago),
                     YearMonth.from(fechaVigente)
             );
-            mesesConTarifaAnterior = mesesEntrePagoYVigente - 1;
+            int mesesConTarifaAnterior = mesesEntrePagoYVigente - 1;
             int mesesEntreVigenteYAhora = (int) ChronoUnit.MONTHS.between(
                     YearMonth.from(fechaVigente),
                     YearMonth.from(LocalDate.now())
             );
-            mesesConTarifaActual = mesesEntreVigenteYAhora - 1;
-            return ((mesesConTarifaAnterior * tarifaAnterior) + (mesesConTarifaActual * tarifaActual)) * 2;
-        } else {
-            int mesesEntrePagoYAhora = (int) ChronoUnit.MONTHS.between(
-                    YearMonth.from(fechaUltimoPago),
-                    YearMonth.from(LocalDate.now())
-            );
-            mesesConTarifaActual = mesesEntrePagoYAhora - 1;
-            resultado = (mesesConTarifaActual * tarifaActual) * 2;
+            int mesesConTarifaActual = mesesEntreVigenteYAhora - 1;
+            return BigDecimal.valueOf(tarifaAnterior).setScale(2, RoundingMode.HALF_DOWN)
+                    .multiply(BigDecimal.valueOf(mesesConTarifaAnterior))
+                    .add(BigDecimal.valueOf(tarifaActual).setScale(2, RoundingMode.HALF_DOWN)
+                            .multiply(BigDecimal.valueOf(mesesConTarifaActual)))
+                    .multiply(new BigDecimal("2"))
+                    .setScale(2, RoundingMode.HALF_DOWN)
+                    .abs()
+                    .floatValue();
         }
-
-        if (resultado < 0)
-            resultado = resultado * -1;
-        return resultado;
+        int mesesEntrePagoYAhora = (int) ChronoUnit.MONTHS.between(
+                YearMonth.from(fechaUltimoPago),
+                YearMonth.from(LocalDate.now())
+        );
+        int mesesConTarifaActual = mesesEntrePagoYAhora - 1;
+        return BigDecimal.valueOf(tarifaActual).setScale(2, RoundingMode.HALF_DOWN)
+                .multiply(BigDecimal.valueOf(mesesConTarifaActual))
+                .setScale(2, RoundingMode.HALF_DOWN)
+                .abs()
+                .floatValue();
     }
 }

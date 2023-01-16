@@ -4,8 +4,8 @@ import com.revok.pagoEnLineaApi.model.Contrato;
 import com.revok.pagoEnLineaApi.model.Departamento;
 import com.revok.pagoEnLineaApi.model.Deuda;
 import com.revok.pagoEnLineaApi.service.ContratoService;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,23 +25,32 @@ public class ContratoController {
     @GetMapping
     public ResponseEntity<Contrato> findContrato(@RequestParam(defaultValue = "") @NotBlank String cvcontrato,
                                                  @RequestParam(defaultValue = "") @NotBlank String departamento) {
-        if (Arrays.stream(Departamento.values()).noneMatch(d -> d.name().equals(departamento.toUpperCase()))) {
+        final String departamentoUppercase = departamento.toUpperCase();
+        if (Arrays.stream(Departamento.values()).noneMatch(d -> d.name().equals(departamentoUppercase))) {
             return ResponseEntity.badRequest().header("error", "Departamento desconocido").build();
         }
-        Contrato contrato = contratoService.findContrato(cvcontrato, Departamento.valueOf(Departamento.class, departamento.toUpperCase()));
+        Departamento departamentoTyped = Departamento.valueOf(Departamento.class, departamentoUppercase);
+        Contrato contrato = contratoService.findContrato(cvcontrato, departamentoTyped);
         return ResponseEntity.ok(contrato);
     }
 
     @GetMapping("/deuda")
     public ResponseEntity<Deuda> findDeudaContrato(@RequestParam(defaultValue = "") @NotBlank String cvcontrato,
                                                    @RequestParam(defaultValue = "") @NotBlank String departamento,
-                                                   @RequestParam(defaultValue = "0") @NotNull Integer meses) {
-        if (Arrays.stream(Departamento.values()).noneMatch(d -> d.name().equals(departamento.toUpperCase()))) {
+                                                   @RequestParam(defaultValue = "0") @Min(value = 0) Integer meses) {
+        final String departamentoUppercase = departamento.toUpperCase();
+        if (Arrays.stream(Departamento.values()).noneMatch(d -> d.name().equals(departamentoUppercase))) {
             return ResponseEntity.badRequest().header("error", "Departamento desconocido").build();
         }
-
-        Contrato contrato = contratoService.findContrato(cvcontrato, Departamento.valueOf(Departamento.class, departamento.toUpperCase()));
-        Deuda deuda = contratoService.findCuentaPorPagarFromMonths(contrato, meses, Departamento.valueOf(Departamento.class, departamento.toUpperCase()));
+        Departamento departamentoTyped = Departamento.valueOf(Departamento.class, departamentoUppercase);
+        Contrato contrato = contratoService.findContrato(cvcontrato, departamentoTyped);
+        Deuda deuda = contratoService.findCuentaPorPagarFromMonths(contrato, departamentoTyped, meses);
         return ResponseEntity.ok(deuda);
+    }
+
+    @GetMapping("/maxDeudor")
+    public ResponseEntity<Contrato> findMaxDeudaMesesContrato() {
+        Contrato contrato = contratoService.maxDeuda();
+        return ResponseEntity.ok(contrato);
     }
 }
