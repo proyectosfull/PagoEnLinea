@@ -3,6 +3,8 @@ package com.revok.pagoEnLineaApi.model;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
+
 @Data
 @Entity
 @NamedNativeQuery(name = "findConvenio",
@@ -22,7 +24,7 @@ import lombok.Data;
                         @ColumnResult(name = "numeroConvenio", type = Integer.class),
                         @ColumnResult(name = "adeudoTotal", type = Float.class),
                         @ColumnResult(name = "estatus"),
-                        @ColumnResult(name = "porPagar", type = Float.class),
+                        @ColumnResult(name = "porPagar", type = BigDecimal.class),
                         @ColumnResult(name = "enganche", type = Float.class),
                         @ColumnResult(name = "tipoPago"),
                         @ColumnResult(name = "realizo"),
@@ -34,7 +36,7 @@ public class Convenio {
     private Integer numeroConvenio;
     private Float adeudoTotal;
     private String estatus;
-    private Float porPagar;
+    private BigDecimal porPagar;
     private Float enganche;
     private String tipoPago;
     private String realizo;

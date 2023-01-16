@@ -1,20 +1,24 @@
 package com.revok.pagoEnLineaApi.model;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-@Data
+@Getter
+@Setter
 public class Deuda {
-    private float tarifaMensual = 0f;
-    private float saneamientoMensual = 0f;
-    private float totalPagar = 0f;
-    private float totalCuotaOConsumo = 0f;
-    private float totalSaneamiento = 0f;
-    private float totalRecargos = 0f;
-    private float totalGastosCobranza = 0f;
+    private BigDecimal tarifaMensual = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal saneamientoMensual = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal totalPagar = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal totalCuotaOConsumo = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal totalSaneamiento = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal totalRecargos = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal totalGastosCobranza = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
     private LocalDate fechaUltimoPago;
     private LocalDate fechaCubre;
     private List<Concepto> conceptos = new ArrayList<>();

@@ -243,17 +243,16 @@ public class ContratoService {
 
         int mesesDeuda = contrato.getMesesPorPagar();
 
-        float giroTarifaAnterior = contrato.getToma().getTarifaAnterior() * contrato.getToma().getNumfamilia();
-        float giroTarifaActual = contrato.getToma().getTarifaActual() * contrato.getToma().getNumfamilia();
-        float giroSaneamientoActual = contrato.getToma().getTarifaConSaneamiento();
+        BigDecimal giroTarifaAnterior = contrato.getToma().getTarifaAnterior().multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia()));
+        BigDecimal giroTarifaActual = contrato.getToma().getTarifaActual().multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia()));
+        BigDecimal giroSaneamientoActual = contrato.getToma().getTarifaConSaneamiento();
 
-        giroTarifaAnterior *= contrato.getToma().getNumfamilia();
-        giroTarifaActual *= contrato.getToma().getNumfamilia();
+
         LocalDate fechaUltimoPago = LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatterReturn);
 
         int mesesConRecargos = mesesDeuda - 1;
 
-        float maxRecargos = 0;
+        BigDecimal maxRecargos = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
 
 
         if (mesesConRecargos > 0) {
@@ -268,15 +267,13 @@ public class ContratoService {
             );
         }
 
-        BigDecimal totalCuotabd = new BigDecimal("0");
-        float totalCuota = 0f;
-        float totalSaneamiento = 0f;
-        BigDecimal totalSaneamientobd = new BigDecimal("0");
-        float totalGastosCobranza = 0f;
-        float totalRecargos = 0f;
+        BigDecimal totalCuota = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+        BigDecimal totalSaneamiento = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+        BigDecimal totalGastosCobranza = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+        BigDecimal totalRecargos = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
 
-        float tarifa = 0f;
-        float saneamiento = 0f;
+        BigDecimal tarifa = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+        BigDecimal saneamiento = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
 
         // empieza bloque de cuota fija
 
@@ -288,7 +285,7 @@ public class ContratoService {
                 // Obtener el valor de la tarifa del historial de acuerdo a la fecha.
                 Query queryTarifa = entityManager.createNativeQuery(" SELECT TOP 1 tagua_actual" +
                         " FROM tarifas WHERE cvgiro = ? AND YEAR(fechavigencia) = ?" +
-                        " ORDER BY CONVERT(date, fechavigencia) DESC", Float.class);
+                        " ORDER BY CONVERT(date, fechavigencia) DESC", BigDecimal.class);
                 queryTarifa.setParameter(1, contrato.getToma().getCvgiro());
                 queryTarifa.setParameter(2,
                         (fechaUltimoPago.getYear() < ultimoAnioVigencia.getMinVigenciaTarifa() ?
@@ -297,13 +294,13 @@ public class ContratoService {
                                         ultimoAnioVigencia.getMaxVigenciaTarifa() : fechaUltimoPago.getYear()))
                 );
                 List<?> queryTarifaResult = queryTarifa.getResultList();
-                tarifa = queryTarifaResult.isEmpty() ? 0f : (float) queryTarifaResult.get(0);
-                totalCuotabd = totalCuotabd.add(BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN));
+                tarifa = queryTarifaResult.isEmpty() ? BigDecimal.ZERO : (BigDecimal) queryTarifaResult.get(0);
+                totalCuota = totalCuota.add(tarifa);
 
                 Query querySaneamiento = entityManager.createNativeQuery(" SELECT TOP 1 tsane_actual" +
                         " FROM tarifas WHERE cvgiro = ?" +
                         " AND YEAR(fsanevigencia) = ?"
-                        + " ORDER BY CONVERT(date, fsanevigencia) DESC", Float.class);
+                        + " ORDER BY CONVERT(date, fsanevigencia) DESC", BigDecimal.class);
                 querySaneamiento.setParameter(1, contrato.getToma().getCvgiro());
                 querySaneamiento.setParameter(2,
                         (fechaUltimoPago.getYear() < ultimoAnioVigencia.getMinVigenciaSaneamiento() ?
@@ -313,18 +310,15 @@ public class ContratoService {
                 );
 
                 List<?> querySaneamientoResult = querySaneamiento.getResultList();
-                saneamiento = querySaneamientoResult.isEmpty() ? 0f : (float) querySaneamientoResult.get(0);
-                totalSaneamientobd = totalSaneamientobd.add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN));
+                saneamiento = querySaneamientoResult.isEmpty() ? BigDecimal.ZERO : (BigDecimal) querySaneamientoResult.get(0);
+                totalSaneamiento = totalSaneamiento.add(saneamiento);
                 // Si el contador es  menor a la cantidad de meses total, se agregan recargos
                 // (cuando sea igual a los meses de deuda se asimila que es el
                 // mes corriente y no se agrega recargo).
                 if (i < mesesDeuda && !contrato.getToma().getEspecial() && parametroRecargo != null) {
-                    totalRecargos = BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN)
-                            .add(BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN)
-                                    .add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN))
-                                    .multiply(BigDecimal.valueOf(parametroRecargo.getCantidad())))
-                            .setScale(2, RoundingMode.HALF_DOWN)
-                            .floatValue();
+                    totalRecargos = totalRecargos
+                            .add(tarifa.add(saneamiento).multiply(BigDecimal.valueOf(parametroRecargo.getCantidad())))
+                            .setScale(2, RoundingMode.HALF_DOWN);
                 }
                 fechaUltimoPago = fechaUltimoPago.plus(1, ChronoUnit.MONTHS);
             }
@@ -332,24 +326,21 @@ public class ContratoService {
             for (int i = 0; i < meses; i++) {
                 // Obtener el valor de la tarifa actual del giro.
                 tarifa = giroTarifaActual;
-                totalCuotabd = totalCuotabd.add(BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN));
+                totalCuota = totalCuota.add(tarifa);
 
                 // Obtener el valor del saneamiento actual del giro.
                 saneamiento = giroSaneamientoActual;
-                totalSaneamientobd = totalSaneamientobd.add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN));
+                totalSaneamiento = totalSaneamiento.add(saneamiento);
 
                 if (i < mesesDeuda && !contrato.getToma().getEspecial() && parametroRecargo != null) {
-                    totalRecargos = BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN)
-                            .add(BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN)
-                                    .add(BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN))
-                                    .multiply(BigDecimal.valueOf(parametroRecargo.getCantidad())))
-                            .setScale(2, RoundingMode.HALF_DOWN)
-                            .floatValue();
+                    totalRecargos = totalRecargos
+                            .add(tarifa)
+                            .add(saneamiento)
+                            .multiply(BigDecimal.valueOf(parametroRecargo.getCantidad()))
+                            .setScale(2, RoundingMode.HALF_DOWN);
                 }
             }
         }
-        totalCuota = totalCuotabd.floatValue();
-        totalSaneamiento = totalSaneamientobd.floatValue();
         // Si los meses vencidos son mayor o igual al de máximo de gastos de cobranza
         // se agregan a la deuda.
         if (parametroMesesGastosCobransa != null && mesesConRecargos >= parametroMesesGastosCobransa.getCantidad()) {
@@ -360,25 +351,17 @@ public class ContratoService {
             int mesesPagarSinGastosCobranza = meses - mesesConGastosCobranza;
             // Si paga más de con gastos de cobranza, se quitan l
 
-            float tarifaConGastosCobranza = meses <= mesesConGastosCobranza ? totalCuota :
-                    totalCuotabd.subtract(
-                            BigDecimal.valueOf(tarifa).setScale(2, RoundingMode.HALF_DOWN)
-                                    .multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza))
-                    ).floatValue();
-            float saneamientoConGastosCobranza = meses <= mesesConGastosCobranza ? totalSaneamiento :
-                    totalSaneamientobd.subtract(
-                            BigDecimal.valueOf(saneamiento).setScale(2, RoundingMode.HALF_DOWN)
-                                    .multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza))
-                    ).floatValue();
+            BigDecimal tarifaConGastosCobranza = meses <= mesesConGastosCobranza ? totalCuota :
+                    totalCuota.subtract(tarifa).multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza));
+            BigDecimal saneamientoConGastosCobranza = meses <= mesesConGastosCobranza ? totalSaneamiento :
+                    totalSaneamiento.subtract(saneamiento).multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza));
 
             if (parametroGastosCobransa != null && !contrato.getToma().getEspecial()) {
-                totalGastosCobranza =
-                        BigDecimal.valueOf(tarifaConGastosCobranza).setScale(2, RoundingMode.HALF_DOWN)
-                                .add(BigDecimal.valueOf(saneamientoConGastosCobranza).setScale(2, RoundingMode.HALF_DOWN))
-                                .add(BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN))
-                                .multiply(BigDecimal.valueOf(parametroGastosCobransa.getCantidad()))
-                                .setScale(2, RoundingMode.HALF_DOWN)
-                                .floatValue();
+                totalGastosCobranza = tarifaConGastosCobranza
+                        .add(saneamientoConGastosCobranza)
+                        .add(totalRecargos)
+                        .multiply(BigDecimal.valueOf(parametroGastosCobransa.getCantidad()))
+                        .setScale(2, RoundingMode.HALF_DOWN);
             }
         }
 
@@ -397,11 +380,7 @@ public class ContratoService {
 
         if (conceptoParticular != null) {
             deuda.getConceptos().add(conceptoParticular);
-            deuda.setTotalPagar(
-                    BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
-                            .add(BigDecimal.valueOf(conceptoParticular.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
-                            .floatValue()
-            );
+            deuda.setTotalPagar(deuda.getTotalPagar().add(conceptoParticular.getCosto()));
         }
 
         if (!contrato.getToma().getEspecial()) {
@@ -419,7 +398,7 @@ public class ContratoService {
                 deuda.getConceptos().add(conceptoParticular);
             }
 
-            if (totalRecargos > 0) {
+            if (totalRecargos.compareTo(BigDecimal.ZERO) > 0) {
                 conceptoParticular = new Concepto();
                 conceptoParticular.setCvconcepto(17);
                 conceptoParticular.setDescripcion("RECARGOS");
@@ -429,15 +408,11 @@ public class ContratoService {
                 conceptoParticular = findConceptoDescuentoRecargos(totalRecargos, departamento);
                 if (conceptoParticular != null) {
                     deuda.getConceptos().add(conceptoParticular);
-                    deuda.setTotalPagar(
-                            BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
-                                    .add(BigDecimal.valueOf(conceptoParticular.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
-                                    .floatValue()
-                    );
+                    deuda.setTotalPagar(deuda.getTotalPagar().add(conceptoParticular.getCosto()));
                 }
             }
 
-            if (totalGastosCobranza > 0) {
+            if (totalGastosCobranza.compareTo(BigDecimal.ZERO) > 0) {
                 conceptoParticular = new Concepto();
                 conceptoParticular.setCvconcepto(8);
                 conceptoParticular.setDescripcion("GASTOS DE COBRANZA");
@@ -447,39 +422,26 @@ public class ContratoService {
                 conceptoParticular = findConceptoDescuentoGastosCobranza(totalGastosCobranza, departamento);
                 if (conceptoParticular != null) {
                     deuda.getConceptos().add(conceptoParticular);
-                    deuda.setTotalPagar(
-                            BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
-                                    .add(BigDecimal.valueOf(conceptoParticular.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
-                                    .floatValue()
-                    );
+                    deuda.setTotalPagar(deuda.getTotalPagar().add(conceptoParticular.getCosto()));
                 }
             }
 
             List<Concepto> conceptos = findAllConcepto(contrato.getCvcontrato());
             deuda.getConceptos().addAll(conceptos);
             for (Concepto concepto : conceptos) {
-                deuda.setTotalPagar(
-                        BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
-                                .add(BigDecimal.valueOf(concepto.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
-                                .floatValue()
-                );
+                deuda.setTotalPagar(deuda.getTotalPagar().add(concepto.getCosto()));
             }
 
         } else {
-            float totalConsumoCuota;
+            BigDecimal totalConsumoCuota;
             List<Concepto> conceptos = findAllConcepto(contrato.getCvcontrato());
-            totalConsumoCuota = conceptos.stream().map(Concepto::getCosto).reduce(Float::sum).orElse(0f);
-            totalConsumoCuota += contrato.getConvenio().getPorPagar();
+            totalConsumoCuota = conceptos.stream().map(Concepto::getCosto).reduce(BigDecimal::add).orElse(BigDecimal.ZERO);
+            // pendiente tipado en convenio a big decimal
+            totalConsumoCuota = totalConsumoCuota.add(contrato.getConvenio().getPorPagar());
             conceptoParticular = new Concepto();
             conceptoParticular.setCvconcepto(contrato.getToma().getTieneMedidor() ? 3 : 5);
             conceptoParticular.setDescripcion(contrato.getToma().getTieneMedidor() ? "CONSUMO" : "CUOTA FIJA");
-            conceptoParticular.setCosto(
-                    BigDecimal.valueOf(totalCuota).setScale(2, RoundingMode.HALF_DOWN)
-                            .add(BigDecimal.valueOf(totalConsumoCuota).setScale(2, RoundingMode.HALF_DOWN))
-                            .add(BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN))
-                            .add(BigDecimal.valueOf(totalGastosCobranza).setScale(2, RoundingMode.HALF_DOWN))
-                            .floatValue()
-            );
+            conceptoParticular.setCosto(totalCuota.add(totalConsumoCuota).add(totalRecargos).add(totalGastosCobranza));
             conceptos.add(conceptoParticular);
 
             if (contrato.getToma().getSaneamiento()) {
@@ -497,11 +459,7 @@ public class ContratoService {
         if (!querySaldoAFavorResult.isEmpty()) {
             conceptoParticular = (Concepto) querySaldoAFavorResult.get(0);
             deuda.getConceptos().add(conceptoParticular);
-            deuda.setTotalPagar(
-                    BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
-                            .add(BigDecimal.valueOf(conceptoParticular.getCosto()).setScale(2, RoundingMode.HALF_DOWN))
-                            .floatValue()
-            );
+            deuda.setTotalPagar(deuda.getTotalPagar().add(conceptoParticular.getCosto()));
         }
 
 
@@ -511,23 +469,15 @@ public class ContratoService {
         deuda.setTotalRecargos(totalRecargos);
         deuda.setTotalSaneamiento(totalSaneamiento);
         deuda.setTotalCuotaOConsumo(totalCuota);
-        deuda.setTotalPagar(
-                BigDecimal.valueOf(deuda.getTotalPagar()).setScale(2, RoundingMode.HALF_DOWN)
-                        .add(BigDecimal.valueOf(totalCuota).setScale(2, RoundingMode.HALF_DOWN))
-                        .add(BigDecimal.valueOf(totalSaneamiento).setScale(2, RoundingMode.HALF_DOWN))
-                        .add(BigDecimal.valueOf(totalRecargos).setScale(2, RoundingMode.HALF_DOWN))
-                        .add(BigDecimal.valueOf(totalGastosCobranza).setScale(2, RoundingMode.HALF_DOWN))
-                        .floatValue()
-        );
+        deuda.setTotalPagar(deuda.getTotalPagar().add(totalCuota).add(totalSaneamiento).add(totalRecargos).add(totalGastosCobranza));
         deuda.setFechaCubre(fechaUltimoPago);
         deuda.setFechaUltimoPago(LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatterReturn));
         return deuda;
     }
 
     private Concepto findConceptoDescuento12x11(Contrato contrato, LocalDate fechaCubre) {
-        float tarifaMensual = BigDecimal.valueOf(contrato.getToma().getTarifaActual()).setScale(2, RoundingMode.HALF_DOWN)
-                .multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia())).floatValue();
-        float saneamientoMensual = contrato.getToma().getSaneamientoGiro();
+        BigDecimal tarifaMensual = contrato.getToma().getTarifaActual().multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia()));
+        BigDecimal saneamientoMensual = contrato.getToma().getSaneamientoGiro();
         Query queryDescuento12x11 = entityManager.createNativeQuery("SELECT CASE WHEN activapromocion = 'SI' THEN 1 ELSE 0 END AS activapromocion, fechadetiene FROM datosagua");
         @SuppressWarnings("unchecked")
         List<Object[]> resultQueryDescuento12x11 = queryDescuento12x11.getResultList();
@@ -577,16 +527,11 @@ public class ContratoService {
         Concepto concepto = new Concepto();
         concepto.setCvconcepto(70);
         concepto.setDescripcion(nombrePromocion);
-        concepto.setCosto(
-                BigDecimal.valueOf(tarifaMensual).setScale(2, RoundingMode.HALF_DOWN)
-                        .add(BigDecimal.valueOf(saneamientoMensual).setScale(2, RoundingMode.HALF_DOWN))
-                        .floatValue() * -1f
-        );
+        concepto.setCosto(tarifaMensual.add(saneamientoMensual).negate());
         return concepto;
     }
 
-
-    private Concepto findConceptoDescuentoRecargos(float totalRecargos, Departamento departamento) {
+    private Concepto findConceptoDescuentoRecargos(BigDecimal totalRecargos, Departamento departamento) {
         if (departamento != Departamento.CENTRO)
             return null;
         Query queryIsPromotionActive = entityManager.createNativeQuery("SELECT TOP 1" +
@@ -598,11 +543,11 @@ public class ContratoService {
         Concepto conceptoPromotion = new Concepto();
         conceptoPromotion.setCvconcepto(91);
         conceptoPromotion.setDescripcion("DESC. 100% DE RECARGOS");
-        conceptoPromotion.setCosto(totalRecargos * -1);
+        conceptoPromotion.setCosto(totalRecargos.negate());
         return conceptoPromotion;
     }
 
-    private Concepto findConceptoDescuentoGastosCobranza(float totalGastos, Departamento departamento) {
+    private Concepto findConceptoDescuentoGastosCobranza(BigDecimal totalGastos, Departamento departamento) {
         if (departamento != Departamento.CENTRO)
             return null;
         Query queryIsPromotionActive = entityManager.createNativeQuery("SELECT TOP 1" +
@@ -614,46 +559,36 @@ public class ContratoService {
         Concepto conceptoPromotion = new Concepto();
         conceptoPromotion.setCvconcepto(92);
         conceptoPromotion.setDescripcion("DESC. 50% DE GASTOS DE COBRANZA");
-        conceptoPromotion.setCosto(
-                BigDecimal.valueOf(totalGastos).setScale(2, RoundingMode.HALF_DOWN)
-                        .multiply(new BigDecimal("0.5"))
-                        .setScale(2, RoundingMode.HALF_DOWN)
-                        .negate()
-                        .floatValue()
-        );
+        conceptoPromotion.setCosto(totalGastos.multiply(new BigDecimal("0.50")).setScale(2, RoundingMode.HALF_DOWN).negate());
         return conceptoPromotion;
     }
 
-    private float calcularMaxRangos(LocalDate fechaUltimoPago, LocalDate fechaVigente, float tarifaAnterior, float tarifaActual) {
+    private BigDecimal calcularMaxRangos(LocalDate fechaUltimoPago, LocalDate fechaVigente, BigDecimal tarifaAnterior, BigDecimal tarifaActual) {
         if (fechaUltimoPago.isBefore(fechaVigente)) {
             int mesesEntrePagoYVigente = (int) ChronoUnit.MONTHS.between(
                     YearMonth.from(fechaUltimoPago),
                     YearMonth.from(fechaVigente)
             );
             int mesesConTarifaAnterior = mesesEntrePagoYVigente - 1;
-            int mesesEntreVigenteYAhora = (int) ChronoUnit.MONTHS.between(
+            long mesesEntreVigenteYAhora = ChronoUnit.MONTHS.between(
                     YearMonth.from(fechaVigente),
                     YearMonth.from(LocalDate.now())
             );
-            int mesesConTarifaActual = mesesEntreVigenteYAhora - 1;
-            return BigDecimal.valueOf(tarifaAnterior).setScale(2, RoundingMode.HALF_DOWN)
+            long mesesConTarifaActual = mesesEntreVigenteYAhora - 1;
+            return tarifaAnterior
                     .multiply(BigDecimal.valueOf(mesesConTarifaAnterior))
-                    .add(BigDecimal.valueOf(tarifaActual).setScale(2, RoundingMode.HALF_DOWN)
-                            .multiply(BigDecimal.valueOf(mesesConTarifaActual)))
+                    .add(tarifaActual)
+                    .multiply(BigDecimal.valueOf(mesesConTarifaActual))
                     .multiply(new BigDecimal("2"))
-                    .setScale(2, RoundingMode.HALF_DOWN)
-                    .abs()
-                    .floatValue();
+                    .abs();
         }
-        int mesesEntrePagoYAhora = (int) ChronoUnit.MONTHS.between(
+        long mesesEntrePagoYAhora = ChronoUnit.MONTHS.between(
                 YearMonth.from(fechaUltimoPago),
                 YearMonth.from(LocalDate.now())
         );
-        int mesesConTarifaActual = mesesEntrePagoYAhora - 1;
-        return BigDecimal.valueOf(tarifaActual).setScale(2, RoundingMode.HALF_DOWN)
+        long mesesConTarifaActual = mesesEntrePagoYAhora - 1;
+        return tarifaActual
                 .multiply(BigDecimal.valueOf(mesesConTarifaActual))
-                .setScale(2, RoundingMode.HALF_DOWN)
-                .abs()
-                .floatValue();
+                .abs();
     }
 }

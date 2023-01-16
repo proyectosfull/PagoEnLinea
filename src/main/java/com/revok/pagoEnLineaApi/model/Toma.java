@@ -3,6 +3,9 @@ package com.revok.pagoEnLineaApi.model;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 @Data
 @Entity
 @NamedNativeQuery(name = "findToma",
@@ -45,10 +48,10 @@ import lombok.Data;
                         @ColumnResult(name = "especial", type = Boolean.class),
                         @ColumnResult(name = "cvgiro", type = Integer.class),
                         @ColumnResult(name = "nombreGiro"),
-                        @ColumnResult(name = "tarifaAnterior", type = Float.class),
-                        @ColumnResult(name = "tarifaActual", type = Float.class),
-                        @ColumnResult(name = "saneamientoGiro", type = Float.class),
-                        @ColumnResult(name = "TarifaConSaneamiento", type = Float.class),
+                        @ColumnResult(name = "tarifaAnterior", type = BigDecimal.class),
+                        @ColumnResult(name = "tarifaActual", type = BigDecimal.class),
+                        @ColumnResult(name = "saneamientoGiro", type = BigDecimal.class),
+                        @ColumnResult(name = "TarifaConSaneamiento", type = BigDecimal.class),
                         @ColumnResult(name = "descuentoInap", type = Boolean.class),
                         @ColumnResult(name = "nombreEstado"),
                         @ColumnResult(name = "nombreMunicipio"),
@@ -72,10 +75,10 @@ public class Toma {
     private Boolean especial;
     private Integer cvgiro;
     private String nombreGiro;
-    private Float tarifaAnterior;
-    private Float tarifaActual;
-    private Float saneamientoGiro;
-    private Float TarifaConSaneamiento;
+    private BigDecimal tarifaAnterior = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal tarifaActual = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal saneamientoGiro = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal TarifaConSaneamiento = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
     private Boolean descuentoInap;
     private String nombreEstado;
     private String nombreMunicipio;
