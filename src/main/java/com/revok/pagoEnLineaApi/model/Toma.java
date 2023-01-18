@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 @Data
 @Entity
@@ -75,10 +74,10 @@ public class Toma {
     private Boolean especial;
     private Integer cvgiro;
     private String nombreGiro;
-    private BigDecimal tarifaAnterior = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
-    private BigDecimal tarifaActual = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
-    private BigDecimal saneamientoGiro = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
-    private BigDecimal TarifaConSaneamiento = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_DOWN);
+    private BigDecimal tarifaAnterior = BigDecimal.ZERO;
+    private BigDecimal tarifaActual = BigDecimal.ZERO;
+    private BigDecimal saneamientoGiro = BigDecimal.ZERO;
+    private BigDecimal TarifaConSaneamiento = BigDecimal.ZERO;
     private Boolean descuentoInap;
     private String nombreEstado;
     private String nombreMunicipio;

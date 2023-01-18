@@ -44,7 +44,7 @@ public class ContratoController {
         }
         Departamento departamentoTyped = Departamento.valueOf(Departamento.class, departamentoUppercase);
         Contrato contrato = contratoService.findContrato(cvcontrato, departamentoTyped);
-        Deuda deuda = contratoService.findCuentaPorPagarFromMonths(contrato, departamentoTyped, meses);
+        Deuda deuda = contratoService.findDeudaFromMeses(contrato, departamentoTyped, meses);
         return ResponseEntity.ok(deuda);
     }
 
