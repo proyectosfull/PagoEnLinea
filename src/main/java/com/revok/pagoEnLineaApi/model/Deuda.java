@@ -18,7 +18,7 @@ public class Deuda {
     private BigDecimal totalSaneamiento = BigDecimal.ZERO;
     private BigDecimal totalRecargos = BigDecimal.ZERO;
     private BigDecimal totalGastosCobranza = BigDecimal.ZERO;
-    private LocalDate fechaUltimoPago;
+    private String fechaUltimoPago;
     private LocalDate fechaCubre;
     private List<Concepto> conceptos = new ArrayList<>();
 }

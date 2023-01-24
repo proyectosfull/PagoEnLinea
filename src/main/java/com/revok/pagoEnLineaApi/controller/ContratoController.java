@@ -43,8 +43,7 @@ public class ContratoController {
             return ResponseEntity.badRequest().header("error", "Departamento desconocido").build();
         }
         Departamento departamentoTyped = Departamento.valueOf(Departamento.class, departamentoUppercase);
-        Contrato contrato = contratoService.findContrato(cvcontrato, departamentoTyped);
-        Deuda deuda = contratoService.findDeudaFromMeses(contrato, departamentoTyped, meses);
+        Deuda deuda = contratoService.findDeudaFromMeses(cvcontrato, departamentoTyped, meses);
         return ResponseEntity.ok(deuda);
     }
 

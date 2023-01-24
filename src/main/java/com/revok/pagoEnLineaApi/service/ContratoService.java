@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -25,7 +24,6 @@ public class ContratoService {
     private final ZoneId defaultZoneId = ZoneId.of("America/Mexico_City");
     private final Locale defaultLocale = new Locale("spa", "MX");
     private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", defaultLocale);
-    private final DateTimeFormatter formatterReturn = DateTimeFormatter.ofPattern("dd/MM/yyyy", defaultLocale);
 
     public Contrato maxDeuda() {
         Query query = entityManager.createNativeQuery("SELECT cvcontrato FROM dattomas", String.class);
@@ -111,7 +109,7 @@ public class ContratoService {
         ultimopago.setFechaCubre((String) (result.isEmpty() ? null : result.get(0)));
 
 
-        // si el último pago no existe o incluye fecha default, se aplica fecha de cobertura del control de tomas
+        // si el último pago no existe, se aplica fecha de cobertura del control de tomas
         if (ultimopago.getFechaCubre() == null || ultimopago.getFechaCubre().isEmpty() || ultimopago.getFechaCubre().equals("0/0/0")) {
             queryFechaCubre = queryFechaCubreFromTomas;
             queryFechaCubre.setParameter(1, cvcontrato);
@@ -119,16 +117,13 @@ public class ContratoService {
             ultimopago.setFechaCubre((String) (result.isEmpty() ? null : result.get(0)));
         }
 
-        // se aplica formato de fecha al dato antes de retornarlo
-        //* se estima que el aplicar el mismo formato es innecesario. comprobar
-        // ultimopago.setFechaCubre(LocalDate.parse(ultimopago.getFechaCubre(), formatterReturn).format(formatterReturn));
         return ultimopago;
     }
 
     public int findMesesPorPagar(String cvcontrato, Boolean tieneMedidor, String fechaCubre) {
         if (!tieneMedidor) {
-            // distance from fechaCubre and now in months
-            return (int) ChronoUnit.MONTHS.between(YearMonth.parse(fechaCubre, formatterReturn), YearMonth.now(defaultZoneId));
+            // distance between fechaCubre and now in months
+            return (int) ChronoUnit.MONTHS.between(YearMonth.parse(fechaCubre, formatter), YearMonth.now(defaultZoneId));
         }
         Query query = entityManager.createNativeQuery("SELECT COUNT(*) FROM lecturas WHERE cvcontrato = ? AND cvstatus = 'POR PAGAR'", Integer.class);
         query.setParameter(1, cvcontrato);
@@ -155,16 +150,6 @@ public class ContratoService {
         Query query = entityManager.createNamedQuery("findAllParcialidadConcepto");
         query.setParameter(1, cvcontrato);
         return query.getResultList();
-    }
-
-    public String findFechaUltimoPago(String cvcontrato) {
-        Query query = entityManager.createNativeQuery("SELECT TOP 1 d.fecha" +
-                " FROM PagoGlobal p JOIN DetallesFacturas d ON p.numrecibo = d.numfactura" +
-                " WHERE d.cvcontrato = ? AND d.cvproducto = '4' AND p.status = 'PAGADO'" +
-                " ORDER BY d.fechacod DESC", String.class);
-        query.setParameter(1, cvcontrato);
-        List<?> result = query.getResultList();
-        return result.isEmpty() ? null : (String) result.get(0);
     }
 
     public Mensaje findMensaje(String cvcontrato) {
@@ -217,7 +202,6 @@ public class ContratoService {
         contrato.setConceptos(findAllConcepto(cvcontrato));
         contrato.setConvenio(findConvenio(cvcontrato));
         contrato.setParcialidadConceptos(findAllParcialidadConcepto(cvcontrato));
-        contrato.setFechaUltimoPago(findFechaUltimoPago(cvcontrato));
         contrato.setMensaje(findMensaje(cvcontrato));
         if (contrato.getToma() != null && contrato.getToma().getTieneMedidor())
             contrato.setUltimaLectura(findUltimaLectura(cvcontrato));
@@ -230,43 +214,44 @@ public class ContratoService {
         return entityManager.createNamedQuery("findAllParametro").getResultList();
     }
 
-    public Deuda findDeudaFromMeses(Contrato contrato, Departamento departamento, int meses) {
+    public Deuda findDeudaFromMeses(String cvcontrato, Departamento departamento, int meses) {
+        Contrato contrato = new Contrato();
+        contrato.setCvcontrato(cvcontrato);
+        contrato.setToma(findToma(cvcontrato));
+        contrato.setUltimoPago(findUltimoPago(cvcontrato, contrato.getToma().getTieneMedidor()));
+        contrato.setMesesPorPagar(findMesesPorPagar(cvcontrato, contrato.getToma().getTieneMedidor(), contrato.getUltimoPago().getFechaCubre()));
+
         // if meses comes with 0 then set mesesPorPagar from contrato
         meses = meses > 0 ? meses : contrato.getMesesPorPagar();
 
-        Deuda deuda = contrato.getToma().getTieneMedidor() ? null : getDeudaFromCuotaFija(contrato, departamento, meses);
+        Deuda deuda = contrato.getToma().getTieneMedidor() ? getDeudaFromMedidor(contrato, meses) : getDeudaFromCuotaFija(contrato, departamento, meses);
 
         appendDefaultConceptos(deuda, contrato, departamento, meses);
-
         return deuda;
     }
 
-    @FunctionalInterface
-    public interface TriFunction<T, U, V, R> {
-        R apply(T t, U u, V v);
-    }
-
-    private Deuda getDeudadFromMedidor(Contrato contrato, Departamento departamento, int meses) {
-        TriFunction<String, String, BigDecimal, BigDecimal> getTarifaFromConsumo = (giro, tipo, consumo) -> {
+    private Deuda getDeudaFromMedidor(Contrato contrato, int meses) {
+        TriFunction<Integer, String, BigDecimal, BigDecimal> getTarifaFromConsumo = (giro, tipo, consumo) -> {
             BigDecimal totalLectura = BigDecimal.ZERO;
             BigDecimal UMA = new BigDecimal("96.22");
 
             if (tipo.equals("SANEAMIENTO"))
                 consumo = consumo.multiply(new BigDecimal("0.75")).setScale(2, RoundingMode.HALF_DOWN);
 
-            Query query = entityManager.createNativeQuery("SELECT valor FROM rangoconsumo WHERE clave = " +
+            Query query = entityManager.createNativeQuery("SELECT valor FROM rangosconsumo WHERE clave = " +
                     "(SELECT cvclasifica FROM giros WHERE cvgiros = ?)" +
-                    " AND tipo = ? AND ? BETWEEN rangoInicial AND rangoFinal", BigInteger.class);
+                    " AND tipo = ? AND CONVERT(FLOAT, ?) BETWEEN rangoInicial AND rangoFinal", BigDecimal.class);
             query.setParameter(1, giro);
             query.setParameter(2, tipo);
-            query.setParameter(2, consumo.floatValue());
+            query.setParameter(3, consumo.toPlainString());
 
             @SuppressWarnings("unchecked")
-            List<Object> queryResult = query.getResultList();
+            List<BigDecimal> queryResult = query.getResultList();
 
-            for (Object record : queryResult) {
-                BigDecimal valor = (BigDecimal) record;
-                totalLectura = totalLectura.add(consumo.multiply(valor.multiply(UMA)).setScale(2, RoundingMode.HALF_DOWN));
+            for (BigDecimal valor : queryResult) {
+                BigDecimal valorPorUma = valor.multiply(UMA);
+                BigDecimal consumoPorValorPorUma = consumo.multiply(valorPorUma);
+                totalLectura = totalLectura.add(consumoPorValorPorUma);
             }
 
             return totalLectura;
@@ -300,59 +285,78 @@ public class ContratoService {
         if (queryFechaUltimaLecturaResult.isEmpty())
             return null;
 
-        // max date that cover the last payment
-        LocalDate fechaUltimaLecturaMax = ((LocalDate) queryFechaUltimaLecturaResult.get(0)).plus(1, ChronoUnit.MONTHS).minus(1, ChronoUnit.DAYS);
+        LocalDate fechaUltimaLectura = (LocalDate) queryFechaUltimaLecturaResult.get(0);
+        LocalDate fechaUltimaLecturaMax = LocalDate.of(fechaUltimaLectura.getYear(), fechaUltimaLectura.getMonth(), YearMonth.of(fechaUltimaLectura.getYear(), fechaUltimaLectura.getMonth()).lengthOfMonth());
 
-        Query queryLecturas = entityManager.createNamedQuery(
-                "SELECT fecantes, feclectura, consumo" +
-                        " FROM lecturas WHERE cvcontrato = ? AND cvstatus = 'POR PAGAR' ORDER BY fcodlectura ASC");
+        Query queryLecturas = entityManager.createNativeQuery(
+                "SELECT feclectura, consumo FROM lecturas WHERE cvcontrato = ? AND cvstatus = 'POR PAGAR' ORDER BY fcodlectura DESC");
         queryLecturas.setParameter(1, contrato.getCvcontrato());
+
         @SuppressWarnings("unchecked")
         List<Object[]> queryLecturasResult = queryLecturas.getResultList();
         if (queryLecturasResult.isEmpty())
             return null;
 
-        LocalDate nowMinusUltimoMes = LocalDate.now(defaultZoneId).minus(1, ChronoUnit.MONTHS);
+        // max date that cover the last payment
+        final LocalDate now = LocalDate.now(defaultZoneId);
+        final LocalDate nowMinusCobertura = now.minus(1, ChronoUnit.MONTHS);
+        final LocalDate nowMinusCoberturaAndGastos = now.minus(2, ChronoUnit.MONTHS);
+
         for (int i = 0; i < meses; i++) {
             Object[] record = queryLecturasResult.get(i);
-            LocalDate fechaAnterior = LocalDate.parse((String) record[0], formatter);
-            LocalDate fechaActual = LocalDate.parse((String) record[1], formatter);
-            BigDecimal consumo = BigDecimal.valueOf((int) record[2]);
 
-            BigDecimal tarifaFromConsumo = getTarifaFromConsumo.apply(contrato.getCvcontrato(), "AGUA", consumo);
+            LocalDate fechaActual = LocalDate.parse((String) record[0], formatter);
+            BigDecimal consumo = BigDecimal.valueOf((int) record[1]);
+            boolean isExpired = false;
+            boolean isOutlay = false;
+
+            BigDecimal tarifaFromConsumo = getTarifaFromConsumo.apply(contrato.getToma().getCvgiro(), "AGUA", consumo);
             totalConsumo = totalConsumo.add(tarifaFromConsumo);
             totalAdeudo = totalAdeudo.add(tarifaFromConsumo);
-            if (fechaActual.isBefore(fechaUltimaLecturaMax) && fechaActual.isBefore(nowMinusUltimoMes)) {
+
+
+            if (fechaActual.isBefore(fechaUltimaLecturaMax.minus(1, ChronoUnit.MONTHS)) &&
+                    fechaActual.isBefore(nowMinusCobertura)) {
                 totalVencido = totalVencido.add(tarifaFromConsumo);
+                isExpired = true;
+            }
+
+            if (fechaActual.isBefore(fechaUltimaLecturaMax.minus(2, ChronoUnit.MONTHS)) &&
+                    fechaActual.isBefore(nowMinusCoberturaAndGastos)) {
                 totalGastosCobranza = totalGastosCobranza.add(tarifaFromConsumo);
+                isOutlay = true;
             }
 
             if (!contrato.getToma().getSaneamiento())
                 continue;
 
-            BigDecimal tarifaFromSaneamiento = getTarifaFromConsumo.apply(contrato.getCvcontrato(), "SANEAMIENTO", consumo);
+            BigDecimal tarifaFromSaneamiento = getTarifaFromConsumo.apply(contrato.getToma().getCvgiro(), "SANEAMIENTO", consumo);
             totalSaneamiento = totalSaneamiento.add(tarifaFromSaneamiento);
             totalAdeudo = totalAdeudo.add(tarifaFromSaneamiento);
-            if (fechaActual.isBefore(fechaUltimaLecturaMax) && fechaActual.isBefore(nowMinusUltimoMes)) {
+            if (isExpired) {
                 totalVencido = totalVencido.add(tarifaFromSaneamiento);
+            }
+            if (isOutlay) {
                 totalGastosCobranza = totalGastosCobranza.add(tarifaFromSaneamiento);
             }
         }
         if (contrato.getToma().getEspecial()) {
             totalGastosCobranza = BigDecimal.ZERO;
         } else {
-            totalRecargos = totalVencido.multiply(BigDecimal.valueOf(parametroRecargo.getCantidad())).setScale(2, RoundingMode.HALF_DOWN);
-            totalGastosCobranza = totalGastosCobranza.compareTo(BigDecimal.ZERO) > 0 ?
-                    totalGastosCobranza.multiply(BigDecimal.valueOf(parametroGastosCobransa.getCantidad()))
-                            .setScale(2, RoundingMode.HALF_DOWN) : BigDecimal.ZERO;
+            totalRecargos = totalVencido.multiply(BigDecimal.valueOf(parametroRecargo.getCantidad()));
+            if (totalGastosCobranza.compareTo(BigDecimal.ZERO) > 0) {
+                totalGastosCobranza = totalGastosCobranza.multiply(BigDecimal.valueOf(parametroGastosCobransa.getCantidad()));
+            }
         }
 
         Deuda deuda = new Deuda();
-        deuda.setTotalGastosCobranza(totalGastosCobranza);
-        deuda.setTotalRecargos(totalRecargos);
-        deuda.setTotalSaneamiento(totalSaneamiento);
-        deuda.setTotalCuotaOConsumo(totalConsumo);
-        deuda.setTotalPagar(totalConsumo.add(totalSaneamiento).add(totalRecargos).add(totalGastosCobranza));
+        deuda.setTotalGastosCobranza(totalGastosCobranza.setScale(2, RoundingMode.HALF_DOWN));
+        deuda.setTotalRecargos(totalRecargos.setScale(2, RoundingMode.HALF_DOWN));
+        deuda.setTotalSaneamiento(totalSaneamiento.setScale(2, RoundingMode.HALF_DOWN));
+        deuda.setTotalCuotaOConsumo(totalConsumo.setScale(2, RoundingMode.HALF_DOWN));
+        deuda.setTotalPagar(totalConsumo.add(totalSaneamiento).add(totalRecargos).add(totalGastosCobranza).setScale(2, RoundingMode.HALF_DOWN));
+        deuda.setFechaCubre(LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatter));
+        deuda.setFechaUltimoPago(contrato.getUltimoPago().getFechaRegistro());
         return deuda;
     }
 
@@ -363,11 +367,11 @@ public class ContratoService {
         BigDecimal giroTarifaActual = contrato.getToma().getTarifaActual().multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia()));
         BigDecimal giroSaneamientoActual = contrato.getToma().getTarifaConSaneamiento();
 
-        LocalDate fechaUltimoPago = LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatterReturn);
+        LocalDate fechaUltimoPago = LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatter);
 
         BigDecimal maxRecargos = mesesConRecargos > 0 ? calcularMaxRangos(
                 fechaUltimoPago,
-                LocalDate.parse(contrato.getToma().getFechaVigenciaTarifaGiro(), formatterReturn),
+                LocalDate.parse(contrato.getToma().getFechaVigenciaTarifaGiro(), formatter),
                 giroTarifaAnterior,
                 giroTarifaActual
         ) : BigDecimal.ZERO;
@@ -487,16 +491,16 @@ public class ContratoService {
         deuda.setTotalCuotaOConsumo(totalCuota);
         deuda.setTotalPagar(deuda.getTotalPagar().add(totalCuota).add(totalSaneamiento).add(totalRecargos).add(totalGastosCobranza));
         deuda.setFechaCubre(fechaUltimoPago);
-        deuda.setFechaUltimoPago(LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatterReturn));
+        deuda.setFechaUltimoPago(contrato.getUltimoPago().getFechaCubre());
         return deuda;
     }
 
     private void appendDefaultConceptos(Deuda deuda, Contrato contrato, Departamento departamento, int meses) {
         Concepto conceptoParticular;
+
         // Verificar si descuento de 12x11 está activo; aplicarlo en caso de estar activo
         // Buscar concepto de descuento por campaña promocional anual en caso de estar activo.
         // Valor nulo en caso contrario
-
         conceptoParticular = findConceptoDescuento12x11(contrato, meses);
 
         if (conceptoParticular != null) {
@@ -557,7 +561,6 @@ public class ContratoService {
             BigDecimal totalConsumoCuota;
             List<Concepto> conceptos = findAllConcepto(contrato.getCvcontrato());
             totalConsumoCuota = conceptos.stream().map(Concepto::getCosto).reduce(BigDecimal::add).orElse(BigDecimal.ZERO);
-            // pendiente tipado en convenio a big decimal
             totalConsumoCuota = totalConsumoCuota.add(contrato.getConvenio().getPorPagar());
             conceptoParticular = new Concepto();
             conceptoParticular.setCvconcepto(contrato.getToma().getTieneMedidor() ? 3 : 5);
@@ -585,7 +588,7 @@ public class ContratoService {
     }
 
     private Concepto findConceptoDescuento12x11(Contrato contrato, int meses) {
-        LocalDate fechaCubreMax = LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatterReturn).plus(meses, ChronoUnit.MONTHS);
+        LocalDate fechaCubreMax = LocalDate.parse(contrato.getUltimoPago().getFechaCubre(), formatter).plus(meses, ChronoUnit.MONTHS);
         BigDecimal tarifaMensual = contrato.getToma().getTarifaActual().multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia()));
         BigDecimal saneamientoMensual = contrato.getToma().getSaneamientoGiro();
         Query queryDescuento12x11 = entityManager.createNativeQuery("SELECT CASE WHEN activapromocion = 'SI' THEN 1 ELSE 0 END AS activapromocion, fechadetiene FROM datosagua");
@@ -622,7 +625,7 @@ public class ContratoService {
         }
 
         // apply LocalDate type and set year and month to max values (end of year)
-        LocalDate fechaFinPromocionTyped = LocalDate.parse(fechaFinPromocion, formatterReturn);
+        LocalDate fechaFinPromocionTyped = LocalDate.parse(fechaFinPromocion, formatter);
         fechaFinPromocionTyped = LocalDate.of(fechaFinPromocionTyped.getYear(), 12, 31);
         if (fechaCubreMax.getMonth() != fechaFinPromocionTyped.getMonth() || fechaCubreMax.getYear() != fechaFinPromocionTyped.getYear()) {
             return null;
@@ -702,5 +705,10 @@ public class ContratoService {
                 .multiply(BigDecimal.valueOf(mesesConTarifaActual))
                 .abs()
                 .setScale(2, RoundingMode.HALF_DOWN);
+    }
+
+    @FunctionalInterface
+    public interface TriFunction<T, U, V, R> {
+        R apply(T t, U u, V v);
     }
 }

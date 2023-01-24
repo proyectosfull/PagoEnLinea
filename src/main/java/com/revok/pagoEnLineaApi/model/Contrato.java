@@ -17,7 +17,6 @@ public class Contrato {
     private List<Concepto> conceptos;
     private Convenio convenio;
     private List<ParcialidadConcepto> parcialidadConceptos;
-    private String fechaUltimoPago;
     private UltimaLectura ultimaLectura;
     private Mensaje mensaje;
     private List<HistoricoAuxiliar> historicoAuxiliar;
