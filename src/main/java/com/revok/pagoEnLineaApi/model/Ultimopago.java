@@ -3,6 +3,8 @@ package com.revok.pagoEnLineaApi.model;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.time.LocalDate;
+
 @Data
 @Entity
 @NamedNativeQuery(name = "findUltimoPago",
@@ -26,5 +28,5 @@ public class Ultimopago {
     private Integer numeroRecibo;
     private Float total;
     private String fechaRegistro;
-    private String fechaCubre;
+    private LocalDate fechaCubre;
 }

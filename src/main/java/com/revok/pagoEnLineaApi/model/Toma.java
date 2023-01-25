@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 @Entity
@@ -58,8 +59,8 @@ import java.math.BigDecimal;
                         @ColumnResult(name = "nombreLocalidad"),
                         @ColumnResult(name = "nombreEstatus"),
                         @ColumnResult(name = "observa"),
-                        @ColumnResult(name = "fechaVigenciaTarifaGiro"),
-                        @ColumnResult(name = "fechaVigenciaSaneamientoGiro"),
+                        @ColumnResult(name = "fechaVigenciaTarifaGiro", type = LocalDate.class),
+                        @ColumnResult(name = "fechaVigenciaSaneamientoGiro", type = LocalDate.class),
                 }
         ))
 public class Toma {
@@ -85,6 +86,6 @@ public class Toma {
     private String nombreLocalidad;
     private String nombreEstatus;
     private String observa;
-    private String fechaVigenciaTarifaGiro;
-    private String fechaVigenciaSaneamientoGiro;
+    private LocalDate fechaVigenciaTarifaGiro;
+    private LocalDate fechaVigenciaSaneamientoGiro;
 }

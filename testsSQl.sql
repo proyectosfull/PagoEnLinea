@@ -25,18 +25,18 @@ SELECT count(*) FROM controltomas WHERE fechacubre LIKE '__/__/____' AND (freins
 // insert default value to both arguments
 SELECT count(*) FROM controltomas WHERE fechacubre NOT LIKE '____-__-__' AND fechacubre NOT LIKE '__/__/____';
 
+SELECT count(*) FROM pagoglobal WHERE fechareg NOT LIKE '____-__-__' AND fechareg NOT LIKE '__/__/____';
+
 SELECT valor FROM rangosconsumo WHERE clave = (SELECT cvclasifica FROM giros WHERE cvgiros = 6) AND tipo = 'AGUA' AND '96' BETWEEN rangoInicial AND rangoFinal;
 
 SELECT valor FROM rangosconsumo WHERE clave = (SELECT cvclasifica FROM giros WHERE cvgiros = 6) AND tipo = 'SANEAMIENTO' AND '72.00' BETWEEN rangoInicial AND rangoFinal;
 
-//////////////////////////////////////////////
+////////////////////////////////////////////// pagoglobal
 
-SELECT TOP 1 numrecibo AS numeroRecibo, total, fechareg AS fechaRegistro FROM PagoGlobal WHERE cvcontrato = ? AND status = 'PAGADO'  ORDER BY fcodreg DESC
+select count(*) from pagoglobal where fcubre like '________' and like fechaantes like '________';
 
-SELECT TOP 1 numrecibo AS numeroRecibo, total, fechareg AS fechaRegistro FROM PagoGlobal WHERE cvcontrato = 8005 AND status = 'PAGADO'  ORDER BY fcodreg DESC
+select count(*) from pagoglobal where fcubre like '__/__/____' and like fechaantes like '________';
 
+select count(*) from pagoglobal where fcubre like '________' and like fechaantes like '__/__/____';
 
-SELECT TOP 1 d.fecha FROM PagoGlobal p JOIN DetallesFacturas d ON p.numrecibo = d.numfactura WHERE d.cvcontrato = ? AND d.cvproducto = '4' AND p.status = 'PAGADO' ORDER BY d.fechacod DESC
-
-SELECT TOP 1 d.fecha FROM PagoGlobal p JOIN DetallesFacturas d ON p.numrecibo = d.numfactura WHERE d.cvcontrato = 8005 AND d.cvproducto = '4' AND p.status = 'PAGADO' ORDER BY d.fechacod DESC
-
+select count(*) from pagoglobal where fcubre like '__/__/____' and like fechaantes like '__/__/____';
