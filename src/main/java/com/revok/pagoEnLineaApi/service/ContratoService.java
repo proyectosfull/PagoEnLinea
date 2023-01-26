@@ -446,10 +446,10 @@ public class ContratoService {
             // Si paga más de con gastos de cobranza, se quitan l
 
             BigDecimal tarifaConGastosCobranza = meses <= mesesConGastosCobranza ? totalCuota :
-                    totalCuota.subtract(tarifa).multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza));
+                    totalCuota.subtract(tarifa.multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza)));
 
             BigDecimal saneamientoConGastosCobranza = meses <= mesesConGastosCobranza ? totalSaneamiento :
-                    totalSaneamiento.subtract(saneamiento).multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza));
+                    totalSaneamiento.subtract(saneamiento.multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza)));
 
             if (parametroGastosCobransa != null && !contrato.getToma().getEspecial()) {
                 totalGastosCobranza = tarifaConGastosCobranza
