@@ -233,7 +233,7 @@ public class ContratoService {
                 totalLectura = totalLectura.add(consumoPorValorPorUma);
             }
 
-            return totalLectura.setScale(2, RoundingMode.HALF_DOWN);
+            return totalLectura;
         };
 
         List<Parametro> parametros = findAllParametro();
@@ -447,6 +447,7 @@ public class ContratoService {
 
             BigDecimal tarifaConGastosCobranza = meses <= mesesConGastosCobranza ? totalCuota :
                     totalCuota.subtract(tarifa).multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza));
+
             BigDecimal saneamientoConGastosCobranza = meses <= mesesConGastosCobranza ? totalSaneamiento :
                     totalSaneamiento.subtract(saneamiento).multiply(BigDecimal.valueOf(mesesPagarSinGastosCobranza));
 

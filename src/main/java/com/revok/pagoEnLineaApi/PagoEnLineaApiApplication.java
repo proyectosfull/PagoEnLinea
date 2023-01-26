@@ -16,6 +16,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @SpringBootApplication
 public class PagoEnLineaApiApplication {
@@ -41,7 +42,7 @@ public class PagoEnLineaApiApplication {
 
         System.out.println("standardization begins");
 
-        int count = 0;
+        AtomicInteger count = new AtomicInteger(0);
 
         // normalización 1: aplicación de formato estándar de fecha (yyyy-mm-dd) sobre fecantes y feclectura en lecturas
         try {
@@ -57,7 +58,7 @@ public class PagoEnLineaApiApplication {
                 updateLecturas.setParameter(2, fechaLectura.format(formatter));
                 updateLecturas.setParameter(3, cvlectura);
                 updateLecturas.executeUpdate();
-                count++;
+                count.getAndSet(count.get() + 1);
                 System.out.println(count);
             }
 
@@ -75,7 +76,7 @@ public class PagoEnLineaApiApplication {
             for (Integer cvcontrato : resultNumFamilia) {
                 updateNumFamilias.setParameter(1, cvcontrato);
                 updateNumFamilias.executeUpdate();
-                count++;
+                count.getAndSet(count.get() + 1);
                 System.out.println(count);
             }
 
@@ -84,7 +85,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("step 2 complete with error: " + e.getLocalizedMessage());
         }
 
-        int countPagoGlobal = 0;
+        AtomicInteger countPagoGlobal = new AtomicInteger(0);
         // Normalización 3: formato de fecha en pagoGlobal.
         try {
             Query queryFechasPagoGlobal = entityManager.createNativeQuery(
@@ -97,7 +98,7 @@ public class PagoEnLineaApiApplication {
             List<Object[]> resultFechasPagoGlobal = queryFechasPagoGlobal.getResultList();
             Query updateFechasPagoGlobal = entityManager.createNativeQuery(
                     "UPDATE pagoglobal SET fechareg = ?, fcubre = ?, fechaantes = ? WHERE cvcontrato = ? AND fechareg = ? AND numrecibo = ?");
-            for (Object[] record : resultFechasPagoGlobal) {
+            resultFechasPagoGlobal.parallelStream().forEach(record -> {
                 String cvcontrato = (String) record[0];
                 String fechaRegistro = (String) record[1];
                 LocalDate fechaRegistroTyped = LocalDate.parse(fechaRegistro, formatterReturn);
@@ -111,12 +112,9 @@ public class PagoEnLineaApiApplication {
                 updateFechasPagoGlobal.setParameter(5, fechaRegistro);
                 updateFechasPagoGlobal.setParameter(6, numeroRecibo);
                 updateFechasPagoGlobal.executeUpdate();
-                count++;
-                countPagoGlobal++;
-                System.out.println(countPagoGlobal);
-                System.out.println(count);
-            }
-
+                System.out.println(count.getAndIncrement());
+                System.out.println(countPagoGlobal.getAndIncrement());
+            });
             System.out.println("step 3 complete");
         } catch (Exception e) {
             System.out.println("step 3 complete with error: " + e.getLocalizedMessage());
@@ -137,7 +135,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("query finish");
             Query updateFechasPagoGlobal = entityManager.createNativeQuery(
                     "UPDATE pagoglobal SET fechareg = ?, fcubre = ?, fechaantes = ? WHERE cvcontrato = ? AND fechareg = ? AND numrecibo = ?");
-            for (Object[] record : resultFechasPagoGlobal) {
+            resultFechasPagoGlobal.parallelStream().forEach(record -> {
                 String cvcontrato = (String) record[0];
                 String fechaRegistro = (String) record[1];
                 LocalDate fechaRegistroTyped = LocalDate.parse(fechaRegistro, formatterReturn);
@@ -151,18 +149,17 @@ public class PagoEnLineaApiApplication {
                 updateFechasPagoGlobal.setParameter(5, fechaRegistro);
                 updateFechasPagoGlobal.setParameter(6, numeroRecibo);
                 updateFechasPagoGlobal.executeUpdate();
-                count++;
-                countPagoGlobal++;
-                System.out.println(countPagoGlobal);
-                System.out.println(count);
-            }
-
+                System.out.println(count.getAndIncrement());
+                System.out.println(countPagoGlobal.getAndIncrement());
+            });
             System.out.println("step 3.1 complete");
         } catch (Exception e) {
             System.out.println("step 3.1 complete with error: " + e.getLocalizedMessage());
             System.out.println("step 3.1 complete with error: " + e.getMessage());
             e.printStackTrace();
         }
+
+        System.out.println("step 3.1 complete pagoglobal with: " + countPagoGlobal.get());
 
         // Normalización 3.2: formato de fecha en pagoGlobal.
         try {
@@ -176,7 +173,7 @@ public class PagoEnLineaApiApplication {
             List<Object[]> resultFechasPagoGlobal = queryFechasPagoGlobal.getResultList();
             Query updateFechasPagoGlobal = entityManager.createNativeQuery(
                     "UPDATE pagoglobal SET fechareg = ?, fcubre = ?, fechaantes = ? WHERE cvcontrato = ? AND fechareg = ? AND numrecibo = ?");
-            for (Object[] record : resultFechasPagoGlobal) {
+            resultFechasPagoGlobal.parallelStream().forEach(record -> {
                 String cvcontrato = (String) record[0];
                 String fechaRegistro = (String) record[1];
                 LocalDate fechaRegistroTyped = LocalDate.parse(fechaRegistro, formatterReturn);
@@ -190,11 +187,9 @@ public class PagoEnLineaApiApplication {
                 updateFechasPagoGlobal.setParameter(5, fechaRegistro);
                 updateFechasPagoGlobal.setParameter(6, numeroRecibo);
                 updateFechasPagoGlobal.executeUpdate();
-                count++;
-                countPagoGlobal++;
-                System.out.println(countPagoGlobal);
-                System.out.println(count);
-            }
+                System.out.println(count.getAndIncrement());
+                System.out.println(countPagoGlobal.getAndIncrement());
+            });
 
             System.out.println("step 3.2 complete");
         } catch (Exception e) {
@@ -218,8 +213,7 @@ public class PagoEnLineaApiApplication {
             for (Integer cvcontrato : resultFechaReinstalacionDefault) {
                 updateFechaReinstalacionDefault.setParameter(1, cvcontrato);
                 updateFechaReinstalacionDefault.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
 
             System.out.println("step 4 complete");
@@ -248,8 +242,7 @@ public class PagoEnLineaApiApplication {
                 updateFechaReinstalacion.setParameter(1, fechaReinstalacion.format(formatter));
                 updateFechaReinstalacion.setParameter(2, cvcontrato);
                 updateFechaReinstalacion.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
 
             System.out.println("step 5 complete");
@@ -266,8 +259,7 @@ public class PagoEnLineaApiApplication {
             for (Integer cvcontrato : resultFixDates) {
                 updateFixDates.setParameter(1, cvcontrato);
                 updateFixDates.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
 
             System.out.println("step 6 complete");
@@ -294,8 +286,7 @@ public class PagoEnLineaApiApplication {
                 updateFixDates2.setParameter(1, fechaCubreTyped.format(formatter));
                 updateFixDates2.setParameter(2, cvcontrato);
                 updateFixDates2.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
             System.out.println("step 7 complete");
         } catch (Exception e) {
@@ -319,8 +310,7 @@ public class PagoEnLineaApiApplication {
                 updateFechaReinstalacionYfechaCubre.setParameter(1, fechaCubre.format(formatter));
                 updateFechaReinstalacionYfechaCubre.setParameter(2, cvcontrato);
                 updateFechaReinstalacionYfechaCubre.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
 
             System.out.println("step 8 complete");
@@ -346,8 +336,7 @@ public class PagoEnLineaApiApplication {
                 updateFormatoFechaReinstalacionYfechaCubre.setParameter(2, fechaReinstalacion.format(formatter));
                 updateFormatoFechaReinstalacionYfechaCubre.setParameter(3, cvcontrato);
                 updateFormatoFechaReinstalacionYfechaCubre.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
 
             System.out.println("step 9 complete");
@@ -366,8 +355,7 @@ public class PagoEnLineaApiApplication {
             for (Integer cvcontrato : resultFormatoFechaDefault) {
                 updateFormatoFechaDefault.setParameter(1, cvcontrato);
                 updateFormatoFechaDefault.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
 
             System.out.println("step 10 complete");
@@ -389,8 +377,7 @@ public class PagoEnLineaApiApplication {
                 updateFormatoFechaGiros.setParameter(2, fechaSaneamiento.format(formatter));
                 updateFormatoFechaGiros.setParameter(3, cvgiro);
                 updateFormatoFechaGiros.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
 
             System.out.println("step 11 complete");
@@ -408,8 +395,7 @@ public class PagoEnLineaApiApplication {
                 LocalDate fechaTyped = LocalDate.parse(fecha, formatterReturn);
                 updateFormatoFechaDatosAgua.setParameter(1, fechaTyped.format(formatter));
                 updateFormatoFechaDatosAgua.executeUpdate();
-                count++;
-                System.out.println(count);
+                System.out.println(count.getAndIncrement());
             }
 
             System.out.println("step 12 complete");
