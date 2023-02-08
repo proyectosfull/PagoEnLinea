@@ -1,6 +1,7 @@
 package com.revok.pagoEnLineaApi.service;
 
 import com.revok.pagoEnLineaApi.model.*;
+import com.revok.pagoEnLineaApi.util.ContratoNotFound;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
@@ -55,9 +56,12 @@ public class ContratoService {
         return contratoMax;
     }
 
-    public Propietario findPropietario(String cvcontrato) {
+    public Propietario findPropietario(String cvcontrato) throws ContratoNotFound {
         Query query = entityManager.createNamedQuery("findPropietario");
         query.setParameter(1, cvcontrato);
+        List<?> result = query.getResultList();
+        if (result.isEmpty())
+            throw new ContratoNotFound(cvcontrato, "Contrato no encontrato");
         return (Propietario) query.getSingleResult();
     }
 
@@ -83,11 +87,11 @@ public class ContratoService {
         return result.isEmpty() ? null : ((String) result.get(0)).isEmpty() ? null : (String) result.get(0);
     }
 
-    public Ultimopago findUltimoPago(String cvcontrato, Boolean tieneMedidor) {
+    public UltimoPago findUltimoPago(String cvcontrato, Boolean tieneMedidor) {
         Query query = entityManager.createNamedQuery("findUltimoPago");
         query.setParameter(1, cvcontrato);
         List<?> resultQueryUltimoPago = query.getResultList();
-        Ultimopago ultimopago = resultQueryUltimoPago.isEmpty() ? null : (Ultimopago) resultQueryUltimoPago.get(0);
+        UltimoPago ultimopago = resultQueryUltimoPago.isEmpty() ? null : (UltimoPago) resultQueryUltimoPago.get(0);
         if (ultimopago == null)
             return null;
 
@@ -169,7 +173,7 @@ public class ContratoService {
         return result.isEmpty() ? null : (UltimaLectura) result.get(0);
     }
 
-    public Contrato findContrato(String cvcontrato, Departamento departamento) {
+    public Contrato findContrato(String cvcontrato, Departamento departamento) throws ContratoNotFound {
         Contrato contrato = new Contrato();
         contrato.setCvcontrato(cvcontrato);
         contrato.setPropietario(findPropietario(cvcontrato));
@@ -340,8 +344,8 @@ public class ContratoService {
     private Deuda getDeudaFromCuotaFija(Contrato contrato, Departamento departamento, int meses) {
         int mesesDeuda = contrato.getMesesPorPagar();
         int mesesConRecargos = mesesDeuda - 1;
-        BigDecimal giroTarifaAnterior = contrato.getToma().getTarifaAnterior().multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia()));
-        BigDecimal giroTarifaActual = contrato.getToma().getTarifaActual().multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia()));
+        BigDecimal giroTarifaAnterior = contrato.getToma().getTarifaAnterior().multiply(BigDecimal.valueOf(contrato.getToma().getNumFamilia()));
+        BigDecimal giroTarifaActual = contrato.getToma().getTarifaActual().multiply(BigDecimal.valueOf(contrato.getToma().getNumFamilia()));
         BigDecimal giroSaneamientoActual = contrato.getToma().getTarifaConSaneamiento();
 
         LocalDate fechaUltimoPago = contrato.getUltimoPago().getFechaCubre();
@@ -468,7 +472,7 @@ public class ContratoService {
         deuda.setTotalSaneamiento(totalSaneamiento);
         deuda.setTotalCuotaOConsumo(totalCuota);
         deuda.setTotalPagar(deuda.getTotalPagar().add(totalCuota).add(totalSaneamiento).add(totalRecargos).add(totalGastosCobranza));
-        deuda.setFechaCubre(contrato.getUltimoPago().getFechaCubre());
+        deuda.setFechaCubre(fechaUltimoPago);
         deuda.setFechaUltimoPago(contrato.getUltimoPago().getFechaRegistro());
         return deuda;
     }
@@ -567,7 +571,7 @@ public class ContratoService {
 
     private Concepto findConceptoDescuento12x11(Contrato contrato, int meses) {
         LocalDate fechaCubreMax = contrato.getUltimoPago().getFechaCubre().plus(meses, ChronoUnit.MONTHS);
-        BigDecimal tarifaMensual = contrato.getToma().getTarifaActual().multiply(BigDecimal.valueOf(contrato.getToma().getNumfamilia()));
+        BigDecimal tarifaMensual = contrato.getToma().getTarifaActual().multiply(BigDecimal.valueOf(contrato.getToma().getNumFamilia()));
         BigDecimal saneamientoMensual = contrato.getToma().getSaneamientoGiro();
         Query queryDescuento12x11 = entityManager.createNativeQuery("SELECT CASE WHEN activapromocion = 'SI' THEN 1 ELSE 0 END AS activapromocion, fechadetiene FROM datosagua");
         @SuppressWarnings("unchecked")
@@ -650,7 +654,7 @@ public class ContratoService {
         Concepto conceptoPromotion = new Concepto();
         conceptoPromotion.setCvconcepto(92);
         conceptoPromotion.setDescripcion("DESC. 50% DE GASTOS DE COBRANZA");
-        conceptoPromotion.setCosto(totalGastos.multiply(new BigDecimal("0.50")).setScale(2, RoundingMode.HALF_DOWN).negate());
+        conceptoPromotion.setCosto(totalGastos.multiply(new BigDecimal("0.30")).setScale(2, RoundingMode.HALF_DOWN).negate());
         return conceptoPromotion;
     }
 

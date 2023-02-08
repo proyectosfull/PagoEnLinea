@@ -16,14 +16,14 @@ import java.time.LocalDate;
 )
 @SqlResultSetMapping(name = "findUltimoPagoMapping",
         classes = @ConstructorResult(
-                targetClass = Ultimopago.class,
+                targetClass = UltimoPago.class,
                 columns = {
                         @ColumnResult(name = "numeroRecibo", type = Integer.class),
                         @ColumnResult(name = "total", type = Float.class),
                         @ColumnResult(name = "fechaRegistro"),
                 }
         ))
-public class Ultimopago {
+public class UltimoPago {
     @Id
     private Integer numeroRecibo;
     private Float total;

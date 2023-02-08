@@ -12,7 +12,7 @@ public class Contrato {
     private Factura factura;
     private String referenciaBancaria;
     private Toma toma;
-    private Ultimopago ultimoPago;
+    private UltimoPago ultimoPago;
     private int mesesPorPagar;
     private List<Concepto> conceptos;
     private Convenio convenio;

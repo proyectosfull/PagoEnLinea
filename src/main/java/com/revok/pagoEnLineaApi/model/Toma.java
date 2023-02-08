@@ -11,7 +11,7 @@ import java.time.LocalDate;
 @NamedNativeQuery(name = "findToma",
         query = "SELECT t.cvcliente, t.calle, t.numint" +
                 ", CASE WHEN conmedidor = 'SI' THEN 1 ELSE 0 END AS tieneMedidor" +
-                ", CASE WHEN t.saneamiento = 'SI' THEN 1 ELSE 0 END AS saneamiento, t.numfamilia" +
+                ", CASE WHEN t.saneamiento = 'SI' THEN 1 ELSE 0 END AS saneamiento, t.numfamilia AS numFamilia" +
                 ", t.codpost AS codigoPostal, CASE WHEN t.apmanten = 'SI' THEN 1 ELSE 0 END AS especial" +
                 ", g.cvgiros as cvgiro, g.nombre AS nombreGiro, g.tanterior AS tarifaAnterior" +
                 ", g.tarifactual AS tarifaActual, g.saneamiento AS saneamientoGiro" +
@@ -43,7 +43,7 @@ import java.time.LocalDate;
                         @ColumnResult(name = "numint"),
                         @ColumnResult(name = "tieneMedidor", type = Boolean.class),
                         @ColumnResult(name = "saneamiento", type = Boolean.class),
-                        @ColumnResult(name = "numfamilia", type = Integer.class),
+                        @ColumnResult(name = "numFamilia", type = Integer.class),
                         @ColumnResult(name = "codigoPostal"),
                         @ColumnResult(name = "especial", type = Boolean.class),
                         @ColumnResult(name = "cvgiro", type = Integer.class),
@@ -70,7 +70,7 @@ public class Toma {
     private String numint;
     private Boolean tieneMedidor;
     private Boolean saneamiento;
-    private Integer numfamilia;
+    private Integer numFamilia;
     private String codigoPostal;
     private Boolean especial;
     private Integer cvgiro;

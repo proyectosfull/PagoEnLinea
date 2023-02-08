@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @SpringBootTest
 class PagoEnLineaApiApplicationTests {
@@ -24,10 +25,11 @@ class PagoEnLineaApiApplicationTests {
 
 	@Test
 	void contratoWithCuotaFija(@Autowired ContratoController contratoController) {
-		Deuda deuda = contratoController.findDeudaContrato("449", Departamento.CENTRO.name(), 25).getBody();
-		Assertions.assertEquals(BigDecimal.valueOf(2574.17), deuda.getTotalCuotaOConsumo(), "Consumo");
-		Assertions.assertEquals(BigDecimal.valueOf(1029.69), deuda.getTotalSaneamiento(), "Saneamiento");
-		Assertions.assertNotNull(deuda.getTotalPagar());
-		Assertions.assertEquals(BigDecimal.valueOf(3811.47), deuda.getTotalPagar(), "Total A pagar");
-	}
+        Deuda deuda = contratoController.findDeudaContrato("449", Departamento.CENTRO.name(), 26).getBody();
+        Assertions.assertEquals(LocalDate.of(2023, 2, 28), deuda.getFechaCubre(), "Fecha cubre");
+        Assertions.assertEquals(BigDecimal.valueOf(2681.07), deuda.getTotalCuotaOConsumo(), "Consumo");
+        Assertions.assertEquals(BigDecimal.valueOf(1072.45), deuda.getTotalSaneamiento(), "Saneamiento");
+        Assertions.assertNotNull(deuda.getTotalPagar());
+        Assertions.assertEquals(BigDecimal.valueOf(4057.93), deuda.getTotalPagar(), "Total A pagar");
+    }
 }

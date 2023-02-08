@@ -20,6 +20,7 @@ public class BeanInitializerConfig {
         config.setAllowCredentials(true);
         config.addExposedHeader("authorization");
         config.addExposedHeader("error");
+        config.addExposedHeader("contrato");
         config.addAllowedOriginPattern("*");
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
