@@ -49,10 +49,4 @@ public class ContratoController {
         Deuda deuda = contratoService.findDeudaFromMeses(cvcontrato, departamentoTyped, meses);
         return ResponseEntity.ok(deuda);
     }
-
-    @GetMapping("/maxDeudor")
-    public ResponseEntity<Contrato> findMaxDeudaMesesContrato() {
-        Contrato contrato = contratoService.maxDeuda();
-        return ResponseEntity.ok(contrato);
-    }
 }

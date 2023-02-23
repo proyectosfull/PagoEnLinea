@@ -27,35 +27,6 @@ public class ContratoService {
     private final Locale defaultLocale = new Locale("spa", "MX");
     private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", defaultLocale);
 
-    public Contrato maxDeuda() {
-        Query query = entityManager.createNativeQuery("SELECT cvcontrato FROM dattomas", String.class);
-        @SuppressWarnings("unchecked")
-        List<String> cvcontratos = query.getResultList();
-        System.out.println("totalContratos: " + cvcontratos.size());
-        int i = 0;
-        Contrato contratoMax = new Contrato();
-        contratoMax.setMesesPorPagar(0);
-        for (String cvcontrato : cvcontratos) {
-            System.out.println("i: " + i);
-            i++;
-            Contrato contrato = new Contrato();
-            contrato.setCvcontrato(cvcontrato);
-            contrato.setToma(findToma(cvcontrato));
-            contrato.setUltimoPago(findUltimoPago(cvcontrato, contrato.getToma().getTieneMedidor()));
-            if (contrato.getUltimoPago() == null)
-                continue;
-            try {
-                contrato.setMesesPorPagar(findMesesPorPagar(cvcontrato, contrato.getToma().getTieneMedidor(), contrato.getUltimoPago().getFechaCubre()));
-                if (contratoMax.getMesesPorPagar() < contrato.getMesesPorPagar())
-                    contratoMax = contrato;
-            } catch (Exception ignored) {
-            }
-        }
-        System.out.println("max cvcontrato: " + contratoMax.getCvcontrato());
-        System.out.println("max meses: " + contratoMax.getMesesPorPagar());
-        return contratoMax;
-    }
-
     public Propietario findPropietario(String cvcontrato) throws ContratoNotFound {
         Query query = entityManager.createNamedQuery("findPropietario");
         query.setParameter(1, cvcontrato);
@@ -63,6 +34,14 @@ public class ContratoService {
         if (result.isEmpty())
             throw new ContratoNotFound(cvcontrato, "Contrato no encontrato");
         return (Propietario) query.getSingleResult();
+    }
+
+    public String findPropietarioByCvcontrato(String cvcontrato) throws ContratoNotFound {
+        Propietario propietario = findPropietario(cvcontrato);
+        String nameBlind = propietario.getNombre().length() < 1 ? "" : propietario.getNombre().charAt(0) + "*".repeat(propietario.getNombre().length() - 1);
+        String lastnameBlind = propietario.getAppaterno().length() < 1 ? "" : propietario.getAppaterno().charAt(0) + "*".repeat(propietario.getAppaterno().length() - 1);
+        String secondLastBlind = propietario.getApmaterno().length() < 1 ? "" : propietario.getApmaterno().charAt(0) + "*".repeat(propietario.getApmaterno().length() - 1);
+        return nameBlind + " " + lastnameBlind + " " + secondLastBlind;
     }
 
     public Factura findFactura(String cvcontrato) {
@@ -87,7 +66,7 @@ public class ContratoService {
         return result.isEmpty() ? null : ((String) result.get(0)).isEmpty() ? null : (String) result.get(0);
     }
 
-    public UltimoPago findUltimoPago(String cvcontrato, Boolean tieneMedidor) {
+    public UltimoPago findUltimoPago(String cvcontrato) {
         Query query = entityManager.createNamedQuery("findUltimoPago");
         query.setParameter(1, cvcontrato);
         List<?> resultQueryUltimoPago = query.getResultList();
@@ -96,17 +75,19 @@ public class ContratoService {
             return null;
 
         Query queryFechaCubre = entityManager.createNativeQuery("SELECT TOP 1 fechacubre FROM ControlTomas WHERE cvcontrato = ?", LocalDate.class);
-        ;
+
         queryFechaCubre.setParameter(1, cvcontrato);
         List<?> result = queryFechaCubre.getResultList();
         ultimopago.setFechaCubre((LocalDate) (result.isEmpty() ? null : result.get(0)));
         return ultimopago;
     }
 
-    public int findMesesPorPagar(String cvcontrato, Boolean tieneMedidor, LocalDate fechaCubre) {
+    public int findMesesPorPagar(String cvcontrato, Boolean tieneMedidor, UltimoPago ultimoPago) {
+        if (ultimoPago == null)
+            return 0;
         if (!tieneMedidor) {
             // distance between fechaCubre and now in months
-            return (int) ChronoUnit.MONTHS.between(YearMonth.from(fechaCubre), YearMonth.now(defaultZoneId));
+            return (int) ChronoUnit.MONTHS.between(YearMonth.from(ultimoPago.getFechaCubre()), YearMonth.now(defaultZoneId));
         }
         Query query = entityManager.createNativeQuery("SELECT COUNT(*) FROM lecturas WHERE cvcontrato = ? AND cvstatus = 'POR PAGAR'", Integer.class);
         query.setParameter(1, cvcontrato);
@@ -180,8 +161,8 @@ public class ContratoService {
         contrato.setFactura(findFactura(cvcontrato));
         contrato.setReferenciaBancaria(findReferenciaBancaria(cvcontrato, departamento));
         contrato.setToma(findToma(cvcontrato));
-        contrato.setUltimoPago(findUltimoPago(cvcontrato, contrato.getToma().getTieneMedidor()));
-        contrato.setMesesPorPagar(findMesesPorPagar(cvcontrato, contrato.getToma().getTieneMedidor(), contrato.getUltimoPago().getFechaCubre()));
+        contrato.setUltimoPago(findUltimoPago(cvcontrato));
+        contrato.setMesesPorPagar(findMesesPorPagar(cvcontrato, contrato.getToma().getTieneMedidor(), contrato.getUltimoPago()));
         contrato.setConceptos(findAllConcepto(cvcontrato));
         contrato.setConvenio(findConvenio(cvcontrato));
         contrato.setParcialidadConceptos(findAllParcialidadConcepto(cvcontrato));
@@ -201,8 +182,8 @@ public class ContratoService {
         Contrato contrato = new Contrato();
         contrato.setCvcontrato(cvcontrato);
         contrato.setToma(findToma(cvcontrato));
-        contrato.setUltimoPago(findUltimoPago(cvcontrato, contrato.getToma().getTieneMedidor()));
-        contrato.setMesesPorPagar(findMesesPorPagar(cvcontrato, contrato.getToma().getTieneMedidor(), contrato.getUltimoPago().getFechaCubre()));
+        contrato.setUltimoPago(findUltimoPago(cvcontrato));
+        contrato.setMesesPorPagar(findMesesPorPagar(cvcontrato, contrato.getToma().getTieneMedidor(), contrato.getUltimoPago()));
 
         // if meses comes with 0 then set mesesPorPagar from contrato
         meses = meses > 0 ? meses : contrato.getMesesPorPagar();

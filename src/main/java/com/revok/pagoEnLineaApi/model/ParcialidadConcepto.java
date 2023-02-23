@@ -11,7 +11,7 @@ import lombok.Data;
                 " LEFT JOIN ConceptosPago c ON p.cvconcepto = c.cvconcepto" +
                 " WHERE c.Activo = 'SI' AND p.status = 'POR PAGAR'" +
                 " AND p.Costo != 0 AND p.cvconcepto = '4' AND p.cvcontrato = ?" +
-                " ORDER BY p.fechacod ASC",
+                " ORDER BY p.fecha ASC",
         resultSetMapping = "findAllParcialidadConceptoMapping"
 )
 @SqlResultSetMapping(name = "findAllParcialidadConceptoMapping",
@@ -22,7 +22,6 @@ import lombok.Data;
                         @ColumnResult(name = "descripcion"),
                         @ColumnResult(name = "costo", type = Float.class),
                         @ColumnResult(name = "fecha"),
-
                 }
         ))
 public class ParcialidadConcepto {

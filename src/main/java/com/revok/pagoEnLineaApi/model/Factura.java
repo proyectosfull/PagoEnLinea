@@ -6,10 +6,10 @@ import lombok.Data;
 @Data
 @Entity
 @NamedNativeQuery(name = "findFactura",
-        query = "SELECT razonSocial, rfc, codpos AS codigoPostal, estado, municipio, localidad, colonia, calle" +
-                ",numint, tipoPersona" +
-                " FROM dat_facturas" +
-                " WHERE cvcontrato = ?",
+        query = "SELECT d.razonSocial, d.rfc, d.codpos AS codigoPostal, d.estado, d.municipio," +
+                " d.localidad, d.colonia, d.calle, d.numint, d.tipoPersona, d.UsoCDFI AS usoCfdi, u.nombre AS cfdiNombre" +
+                " FROM dat_facturas d JOIN Cat_UsoCDFISat u ON d.UsoCDFI = u.clavesat" +
+                " WHERE d.cvcontrato = ?",
         resultSetMapping = "findFacturaMapping"
 )
 @SqlResultSetMapping(name = "findFacturaMapping",
@@ -26,6 +26,8 @@ import lombok.Data;
                         @ColumnResult(name = "calle"),
                         @ColumnResult(name = "numint"),
                         @ColumnResult(name = "tipoPersona"),
+                        @ColumnResult(name = "usoCfdi"),
+                        @ColumnResult(name = "cfdiNombre"),
 
                 }
         ))
@@ -41,4 +43,6 @@ public class Factura {
     private String calle;
     private String numint;
     private String tipoPersona;
+    private String usoCfdi;
+    private String cfdiNombre;
 }
