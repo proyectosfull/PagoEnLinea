@@ -35,15 +35,15 @@ public class PagoEnLineaApiApplication {
 
         ZoneId defaultZoneId = ZoneId.of("America/Mexico_City");
         Locale defaultLocale = new Locale("spa", "MX");
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", defaultLocale);
-        DateTimeFormatter formatterReturn = DateTimeFormatter.ofPattern("dd/MM/yyyy", defaultLocale);
-        DateTimeFormatter formatterDateOnly = DateTimeFormatter.ofPattern("yyyyMMdd", defaultLocale);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", defaultLocale); //23
+        DateTimeFormatter formatterReturn = DateTimeFormatter.ofPattern("dd/MM/yyyy", defaultLocale); //103
+        DateTimeFormatter formatterDateOnly = DateTimeFormatter.ofPattern("yyyyMMdd", defaultLocale); //112
 
         System.out.println("standardization begins");
 
         int count = 0;
 
-        // normalización 1: aplicación de formato estándar de fecha (yyyy-mm-dd) sobre fecantes y feclectura en lecturas
+        // normalización 1: aplicación de formato estándar de fecha (yyyy-mm-dd) sobre fecantes y feclectura en lecturas*
         try {
             Query queryLecturas = entityManager.createNativeQuery("SELECT cvlectura, fecantes, feclectura FROM lecturas WHERE feclectura LIKE '__/__/____'");
             @SuppressWarnings("unchecked")
@@ -66,7 +66,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("step 1 complete" + e.getLocalizedMessage());
         }
 
-        // normalización 2: numfamilia < 1 => 1. aplicado a tabla dattomas
+        // normalización 2: numfamilia < 1 => 1. aplicado a tabla dattomas*
         try {
             Query queryNumFamilias = entityManager.createNativeQuery("SELECT cvcontrato FROM dattomas WHERE numfamilia < 1");
             @SuppressWarnings("unchecked")
@@ -85,7 +85,7 @@ public class PagoEnLineaApiApplication {
         }
 
         int countPagoGlobal = 0;
-        // Normalización 3: formato de fecha en pagoGlobal.
+        // Normalización 3: formato de fecha en pagoGlobal.*
         try {
             Query queryFechasPagoGlobal = entityManager.createNativeQuery(
                     "SELECT cvcontrato, fechareg, fcubre, fechaantes, numrecibo" +
@@ -121,7 +121,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("step 3 complete with error: " + e.getLocalizedMessage());
         }
 
-        // Normalización 3.1: formato de fecha en pagoGlobal.
+        // Normalización 3.1: formato de fecha en pagoGlobal.*
         try {
             System.out.println("step 3.1 begins");
             Query queryFechasPagoGlobal = entityManager.createNativeQuery(
@@ -162,7 +162,7 @@ public class PagoEnLineaApiApplication {
             e.printStackTrace();
         }
 
-        // Normalización 3.2: formato de fecha en pagoGlobal.
+        // Normalización 3.2: formato de fecha en pagoGlobal.*
         try {
             Query queryFechasPagoGlobal = entityManager.createNativeQuery(
                     "SELECT cvcontrato, fechareg, fcubre, fechaantes, numrecibo" +
@@ -200,7 +200,7 @@ public class PagoEnLineaApiApplication {
 
 
         System.out.println("countPagoGlobal: " + countPagoGlobal);
-        // Normalización 4: formato de fecha en fechacubre y freinstala para controltomas
+        // Normalización 4: formato de fecha en fechacubre y freinstala para controltomas*
         //1. insert default value to second argument
         try {
             Query queryFechaReinstalacionDefault = entityManager.createNativeQuery(
@@ -224,7 +224,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("step 4 complete with error: " + e.getLocalizedMessage());
         }
 
-        //2. apply format to second argument
+        //2. apply format to second argument*
         try {
             Query queryFechaReinstalacion = entityManager.createNativeQuery(
                     "SELECT cvcontrato, freinstala" +
@@ -254,7 +254,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("step 5 complete with error: " + e.getLocalizedMessage());
         }
 
-        //3. fix invalid dates with 13 in month subtracting one
+        //3. fix invalid dates with 13 in month subtracting one*
         try {
             Query queryFixDates = entityManager.createNativeQuery("SELECT cvcontrato FROM controltomas WHERE fechacubre = '01/13/2022'", Integer.class);
             @SuppressWarnings("unchecked")
@@ -272,7 +272,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("steop 6 complete with error: " + e.getLocalizedMessage());
         }
 
-        //4. fix invalid dates with month format with just M rather MM
+        //4. fix invalid dates with month format with just M rather MM*
         try {
             Query queryFixDates2 = entityManager.createNativeQuery("SELECT cvcontrato, fechacubre FROM controltomas WHERE fechacubre LIKE '__/_[ ]/____'");
             @SuppressWarnings("unchecked")
@@ -299,7 +299,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("step 7 complete with error: " + e.getLocalizedMessage());
         }
 
-        //3.3. apply format to first argument, insert default value to second argument
+        //3.3. apply format to fechacubre on controltomas*
         try {
             Query queryFechaReinstalacionYfechaCubre = entityManager.createNativeQuery(
                     "SELECT cvcontrato, fechacubre" +
@@ -309,7 +309,7 @@ public class PagoEnLineaApiApplication {
                             " AND (freinstala = '01/01/1900' OR freinstala = '1900-01-01' OR freinstala = '' OR freinstala IS NULL)");
             @SuppressWarnings("unchecked")
             List<Object[]> resultFechaReinstalacionYfechaCubre = queryFechaReinstalacionYfechaCubre.getResultList();
-            Query updateFechaReinstalacionYfechaCubre = entityManager.createNativeQuery("UPDATE controltomas SET freinstala = '1900-01-01', fechacubre = ?  WHERE cvcontrato = ?");
+            Query updateFechaReinstalacionYfechaCubre = entityManager.createNativeQuery("UPDATE controltomas SET freinstala = '1900-01-01', fechacubre = ? WHERE cvcontrato = ?");
             for (Object[] record : resultFechaReinstalacionYfechaCubre) {
                 Integer cvcontrato = (Integer) record[0];
                 LocalDate fechaCubre = LocalDate.parse((String) record[1], formatterReturn);
@@ -325,7 +325,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("step 8 complete with error: " + e.getLocalizedMessage());
         }
 
-        //4. apply format to first and second argument
+        //4. apply format to fechacubre, freinstala on controltomas*
         try {
             Query queryFormatoFechaReinstalacionYfechaCubre = entityManager.createNativeQuery(
                     "SELECT cvcontrato, fechacubre, freinstala" +
@@ -334,7 +334,7 @@ public class PagoEnLineaApiApplication {
                             " AND (freinstala <> '01/01/1900' AND freinstala <> '1900-01-01' AND freinstala <> '' AND freinstala IS NOT NULL)");
             @SuppressWarnings("unchecked")
             List<Object[]> resultFormatoFechaReinstalacionYfechaCubre = queryFormatoFechaReinstalacionYfechaCubre.getResultList();
-            Query updateFormatoFechaReinstalacionYfechaCubre = entityManager.createNativeQuery("UPDATE controltomas SET fechacubre = ?, freinstala = ?  WHERE cvcontrato = ?");
+            Query updateFormatoFechaReinstalacionYfechaCubre = entityManager.createNativeQuery("UPDATE controltomas SET fechacubre = ?, freinstala = ? WHERE cvcontrato = ?");
             for (Object[] record : resultFormatoFechaReinstalacionYfechaCubre) {
                 Integer cvcontrato = (Integer) record[0];
                 LocalDate fechaCubre = LocalDate.parse((String) record[1], formatterReturn);
@@ -353,13 +353,13 @@ public class PagoEnLineaApiApplication {
         }
 
 
-        //5. insert default value to both arguments
+        //5. insert default value to fechacubre, freinstala on controltomas*
         try {
             Query queryFormatoFechaDefault = entityManager.createNativeQuery(
                     "SELECT cvcontrato FROM controltomas WHERE fechacubre NOT LIKE '____-__-__' AND fechacubre NOT LIKE '__/__/____'", Integer.class);
             @SuppressWarnings("unchecked")
             List<Integer> resultFormatoFechaDefault = queryFormatoFechaDefault.getResultList();
-            Query updateFormatoFechaDefault = entityManager.createNativeQuery("UPDATE controltomas SET fechacubre = '1900-01-01', freinstala = '1900-01-01'  WHERE cvcontrato = ?");
+            Query updateFormatoFechaDefault = entityManager.createNativeQuery("UPDATE controltomas SET fechacubre = '1900-01-01', freinstala = '1900-01-01' WHERE cvcontrato = ?");
             for (Integer cvcontrato : resultFormatoFechaDefault) {
                 updateFormatoFechaDefault.setParameter(1, cvcontrato);
                 updateFormatoFechaDefault.executeUpdate();
@@ -372,7 +372,7 @@ public class PagoEnLineaApiApplication {
             System.out.println("step 10 complete with error: " + e.getLocalizedMessage());
         }
 
-        //6. giros apply date format on fecvigencia & fechasaneamiento using cvgiros as row reference
+        //6. giros apply date format on fecvigencia & fechasaneamiento using cvgiros as row reference*
         try {
             Query queryFormatoFechaGiros = entityManager.createNativeQuery("SELECT cvgiros, fecvigencia, fechasaneamiento FROM giros");
             @SuppressWarnings("unchecked")
