@@ -1,5 +1,6 @@
 package com.revok.pagoEnLineaApi.controller;
 
+import com.revok.pagoEnLineaApi.model.dto.out.PropietarioDTO;
 import com.revok.pagoEnLineaApi.service.ContratoService;
 import com.revok.pagoEnLineaApi.util.ContratoNotFound;
 import com.revok.pagoEnLineaApi.util.JwtUtil;
@@ -23,9 +24,11 @@ public class PublicController {
     private final JwtUtil jwtUtil;
 
     @GetMapping("findPropietario")
-    public ResponseEntity<String> findPropietario(@RequestParam(defaultValue = "") @NotBlank String cvcontrato) throws ContratoNotFound {
+    public ResponseEntity<PropietarioDTO> findPropietario(@RequestParam(defaultValue = "") @NotBlank String cvcontrato) throws ContratoNotFound {
         String fullnameBlind = contratoService.findPropietarioByCvcontrato(cvcontrato);
-        return ResponseEntity.ok(fullnameBlind);
+        PropietarioDTO propietarioDTO = new PropietarioDTO();
+        propietarioDTO.setFullname(fullnameBlind);
+        return ResponseEntity.ok(propietarioDTO);
     }
 
     @GetMapping("refreshToken")

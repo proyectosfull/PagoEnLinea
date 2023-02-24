@@ -19,8 +19,10 @@ public class JwtUtil {
     private final Algorithm signToken;
     private final Algorithm signRefreshToken;
     private final PropietarioService propietarioService;
-    private final int tokenExpirationTime = 1000 * 60 * 60 * 8; // 8 hours
-    private final int refreshTokenExpirationTime = 1000 * 60 * 60 * 24 * 2; // 2 weeks
+
+    private final int tokenExpirationTime = 1000 * 60 * 60; // 1 hour
+
+    private final int refreshTokenExpirationTime = 1000 * 60 * 60 * 8;
 
     public JwtUtil(@Value("${key.secret}") String keySecret, @Value("${key.secretRefresh}") String keySecretRefresh, PropietarioService propietarioService) {
         this.signToken = Algorithm.HMAC512(keySecret);
@@ -37,7 +39,7 @@ public class JwtUtil {
         return JWT.create()
                 .withSubject(user.getUsername())
                 .withIssuedAt(new Date(now))
-                .withExpiresAt(new Date(now + tokenExpirationTime))
+                .withExpiresAt(new Date(now + refreshTokenExpirationTime))
                 .sign(signToken);
     }
 

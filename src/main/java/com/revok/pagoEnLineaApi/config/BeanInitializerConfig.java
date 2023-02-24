@@ -19,6 +19,7 @@ public class BeanInitializerConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
         config.addExposedHeader("authorization");
+        config.addExposedHeader("refresh_token");
         config.addExposedHeader("error");
         config.addExposedHeader("contrato");
         config.addAllowedOriginPattern("*");
